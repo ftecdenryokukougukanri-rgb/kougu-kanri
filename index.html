@@ -1797,8 +1797,8 @@ function cropApply(){
   closeCropModal();
   // folderId判定：修理写真か工具写真か
   var folderId = (_cropTargetId==='repair-photo-area')
-    ? '1Ecn4_iEbZk4aMlXANifRBWv7kyWaSC4w'   // 修理写真フォルダ（小）
-    : '1PbgWvVE9AlGmtqdv77gOTqBuC7C4yRkd';   // 工具写真フォルダ（小）
+    ? '1Ecn4_iEbZk4aMlXANifRBWv7kyWaSC4w'   // 修理写真フォルダ
+    : '1PbgWvVE9AlGmtqdv77gOTqBuC7C4yRkd';   // 工具写真フォルダ
   // GASへアップロード（バックグラウンド）
   if(GAS_LOADED){
     toast('📷 写真をアップロード中...');
@@ -1874,42 +1874,10 @@ function uploadPhoto(folderId, base64data, cb){
   var b64=parts[1];
   var ext=mime.indexOf('png')>=0?'.png':'.jpg';
   var fname='photo_'+Date.now()+ext;
-  // base64を小さいチャンクに分けてGETで順番に送信
-  var CHUNK=1500;
-  var chunks=[];
-  for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.slice(i,i+CHUNK));
-  var total=chunks.length;
-  function sendChunk(idx){
-    if(idx>=total){
-      // 全チャンク送信完了 → URLを取得
-      setTimeout(function(){
-        fetch(GAS_URL+'?action=getPhotoUrl&folderId='+encodeURIComponent(folderId)+'&fileName='+encodeURIComponent(fname),{redirect:'follow'})
-        .then(function(r){return r.json();})
-        .then(function(d){
-          if(d&&d.url){cb(null,d.url);}
-          else{cb(null,base64data);}
-        })
-        .catch(function(){cb(null,base64data);});
-      },2000);
-      return;
-    }
-    var url=GAS_URL+'?action=uploadChunk'
-      +'&folderId='+encodeURIComponent(folderId)
-      +'&fileName='+encodeURIComponent(fname)
-      +'&mimeType='+encodeURIComponent(mime)
-      +'&chunk='+encodeURIComponent(chunks[idx])
-      +'&idx='+idx
-      +'&total='+total;
-    fetch(url,{redirect:'follow'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(d&&d.status==='ok'){sendChunk(idx+1);}
-      else{cb(null,base64data);}
-    })
-    .catch(function(){cb(null,base64data);});
-  }
-  toast('📷 写真をアップロード中...');
-  sendChunk(0);
+  gasPost({action:'uploadPhoto',folderId:folderId,fileName:fname,mimeType:mime,base64:b64},function(err,res){
+    if(res&&res.url){cb(null,res.url);}
+    else{cb(null,base64data);}
+  });
 }
 
 // ============================================================
