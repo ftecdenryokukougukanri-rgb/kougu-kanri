@@ -223,7 +223,7 @@ input,select{font-family:inherit}
 // ============================================================
 // GAS連携設定
 // ============================================================
-var GAS_URL = 'https://script.google.com/macros/s/AKfycbwZcRRLRBxlrtN9pbCXHSxM8FaO8rLTGo8L2Auq0snAIbSMxV-rwoyDAZ-G1nfvKPYJVA/exec';
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbxiyBz-FQoXyyFFE33tNXRbRl_ETxsGW6Wfqrzo6QIu7KVPbElX94R3opcD51CH5NrMTQ/exec';
 var GAS_LOADED = false;  // 初回ロード完了フラグ
 
 var cfg = {title:'現場工具管理', color:'#1a56db', bg:''};
@@ -1797,8 +1797,8 @@ function cropApply(){
   closeCropModal();
   // folderId判定：修理写真か工具写真か
   var folderId = (_cropTargetId==='repair-photo-area')
-    ? '1Ecn4_iEbZk4aMlXANifRBWv7kyWaSC4w'   // 修理写真フォルダ
-    : '1PbgWvVE9AlGmtqdv77gOTqBuC7C4yRkd';   // 工具写真フォルダ
+    ? '1PL5JGdGksKFf6QPKmcmOz2XFL7iZiCYH'   // 修理写真フォルダ
+    : '1dlNmY8QWurTyJVbFXi6NY54qG7WIvWAk';   // 工具写真フォルダ
   // GASへアップロード（バックグラウンド）
   if(GAS_LOADED){
     toast('📷 写真をアップロード中...');
@@ -1874,10 +1874,42 @@ function uploadPhoto(folderId, base64data, cb){
   var b64=parts[1];
   var ext=mime.indexOf('png')>=0?'.png':'.jpg';
   var fname='photo_'+Date.now()+ext;
-  gasPost({action:'uploadPhoto',folderId:folderId,fileName:fname,mimeType:mime,base64:b64},function(err,res){
-    if(res&&res.url){cb(null,res.url);}
-    else{cb(null,base64data);}
-  });
+  // base64を小さいチャンクに分けてGETで順番に送信
+  var CHUNK=1500;
+  var chunks=[];
+  for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.slice(i,i+CHUNK));
+  var total=chunks.length;
+  function sendChunk(idx){
+    if(idx>=total){
+      // 全チャンク送信完了 → URLを取得
+      setTimeout(function(){
+        fetch(GAS_URL+'?action=getPhotoUrl&folderId='+encodeURIComponent(folderId)+'&fileName='+encodeURIComponent(fname),{redirect:'follow'})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d&&d.url){cb(null,d.url);}
+          else{cb(null,base64data);}
+        })
+        .catch(function(){cb(null,base64data);});
+      },2000);
+      return;
+    }
+    var url=GAS_URL+'?action=uploadChunk'
+      +'&folderId='+encodeURIComponent(folderId)
+      +'&fileName='+encodeURIComponent(fname)
+      +'&mimeType='+encodeURIComponent(mime)
+      +'&chunk='+encodeURIComponent(chunks[idx])
+      +'&idx='+idx
+      +'&total='+total;
+    fetch(url,{redirect:'follow'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d&&d.status==='ok'){sendChunk(idx+1);}
+      else{cb(null,base64data);}
+    })
+    .catch(function(){cb(null,base64data);});
+  }
+  toast('📷 写真をアップロード中...');
+  sendChunk(0);
 }
 
 // ============================================================
@@ -1913,7 +1945,7 @@ function loadAll(){
     if(data.TM&&data.TM.length){
       var validTM=data.TM.filter(function(t){return t&&typeof t.name==='string';});
       if(validTM.length) TM=validTM.map(function(t){
-        t.yomis=Array.isArray(t.yomis)?t.yomis:(t.yomi?[t.yomi]:[]);
+        t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
         t.total=parseInt(t.total)||0;
         return t;
       });
