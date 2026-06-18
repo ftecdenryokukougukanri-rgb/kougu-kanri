@@ -805,6 +805,7 @@ function onRepTmChange(){
   }
 }
 function saveRepair(){
+  if(_photoUploadPending){toast('📷 写真をアップロード中です。少し待ってから保存してください');return;}
   var tmId=document.getElementById('rep-tm').value;
   if(!tmId){toast('工具を選択してください');return;}
   var siteId=document.getElementById('rep-site').value;
@@ -1013,6 +1014,7 @@ function handlePhoto(e){
   r.readAsDataURL(f);
 }
 function saveItem(){
+  if(_photoUploadPending){toast('📷 写真をアップロード中です。少し待ってから保存してください');return;}
   var name=document.getElementById('im-name').value.trim();
   if(!name){toast('品目名を入力してください');return;}
   var unit=document.getElementById('im-unit').value||'個';
@@ -1531,6 +1533,7 @@ function handleTMPhoto(e){
   r.readAsDataURL(f);
 }
 function saveTMEdit(el){
+  if(_photoUploadPending){toast('📷 写真をアップロード中です。少し待ってから保存してください');return;}
   var id=el.dataset.tmid, t=findTM(id); if(!t)return;
   var name=document.getElementById('tme-name').value.trim();
   if(!name){toast('工具名を入力してください');return;}
@@ -1663,6 +1666,7 @@ function saveCfg(){var t=document.getElementById('cfg-title');if(t){var v=t.valu
 // 写真クロップ
 // ============================================================
 var _cropCallback=null, _cropSrc='', _cropTargetId='';
+var _photoUploadPending=false; // 写真アップロード中フラグ（完了前の保存をブロックする）
 var _cropScale=1, _cropX=0, _cropY=0;
 var _cropDragStart=null, _cropLastPinchDist=0;
 
@@ -1791,31 +1795,36 @@ function cropApply(){
   var sw=vw/_cropScale, sh=vh/_cropScale;
   ctx.drawImage(img,sx,sy,sw,sh,0,0,OUT_W,OUT_H);
   var dataUrl=canvas.toDataURL('image/jpeg',0.75);  // 0.92→0.75に圧縮
-  // まずUIに反映（base64）
+  // まずUIに反映（base64でプレビュー表示）
   var target=document.getElementById(_cropTargetId);
   if(target)target.innerHTML='<img src="'+dataUrl+'" alt="">';
+  var targetIdForUpload=_cropTargetId;
+  var callbackForUpload=_cropCallback;
   closeCropModal();
-  // folderId判定：修理写真か工具写真か
-  var folderId = (_cropTargetId==='repair-photo-area')
-    ? '1PL5JGdGksKFf6QPKmcmOz2XFL7iZiCYH'   // 修理写真フォルダ
-    : '1dlNmY8QWurTyJVbFXi6NY54qG7WIvWAk';   // 工具写真フォルダ
-  // GASへアップロード（バックグラウンド）
+  // kind判定：修理写真か工具写真か
+  var kind = (targetIdForUpload==='repair-photo-area') ? 'repair' : 'tool';
+  // GASへアップロード（完了を待ってからコールバックにURLを渡す。
+  // これを待たずに保存すると、スプレッドシートにはbase64ではなく
+  // 空欄が書き込まれてしまうため、必ず完了を待つ）
   if(GAS_LOADED){
+    _photoUploadPending=true;
     toast('📷 写真をアップロード中...');
-    uploadPhoto(folderId, dataUrl, function(err, url){
-      if(url && url!==dataUrl){
-        // URLが返ってきたらコールバックにURLを渡す
-        if(_cropCallback) _cropCallback(url);
-        // UIの画像はそのまま（base64表示を維持）
+    uploadPhoto(kind, dataUrl, function(err, url){
+      _photoUploadPending=false;
+      if(!err && url){
+        if(callbackForUpload) callbackForUpload(url);
         toast('✅ 写真を保存しました');
       } else {
-        // フォールバック: base64のままコールバック
-        if(_cropCallback) _cropCallback(dataUrl);
+        // 失敗時：base64のままコールバックせず、保存できない旨を明示
+        toast('⚠ 写真のアップロードに失敗しました。もう一度撮影してください');
+        if(target)target.innerHTML='<div><span style="font-size:28px">📷</span><div style="font-size:11px;margin-top:5px;font-weight:500">タップして写真を選択</div></div>';
+        if(callbackForUpload) callbackForUpload('');
       }
     });
   } else {
-    // オフライン時はbase64のまま
-    if(_cropCallback) _cropCallback(dataUrl);
+    // オフライン時：アップロードできないため保存不可を明示
+    toast('⚠ オフラインのため写真を保存できません');
+    if(callbackForUpload) callbackForUpload('');
   }
 }
 
@@ -1864,52 +1873,44 @@ function gasPost(body, cb){
 // ============================================================
 // 写真アップロード（base64 → Google Drive → URL返却）
 // ============================================================
-// folderId: 'tool' か 'repair'
+// kind: 'tool' か 'repair'（GAS側でフォルダを決定）
 // base64data: 'data:image/jpeg;base64,...'
-// cb(err, url) : DriveのURL or null
-function uploadPhoto(folderId, base64data, cb){
-  if(!base64data||base64data.indexOf('data:')<0){cb(null,'');return;}
+// cb(err, url) : DriveのURL（成功時） or null（失敗時）
+function uploadPhoto(kind, base64data, cb){
+  if(!base64data||base64data.indexOf('data:')<0){cb(null,null);return;}
   var parts=base64data.split(',');
   var mime=parts[0].replace('data:','').replace(';base64','');
   var b64=parts[1];
   var ext=mime.indexOf('png')>=0?'.png':'.jpg';
   var fname='photo_'+Date.now()+ext;
-  // base64を小さいチャンクに分けてGETで順番に送信
-  var CHUNK=1500;
-  var chunks=[];
-  for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.slice(i,i+CHUNK));
-  var total=chunks.length;
-  function sendChunk(idx){
-    if(idx>=total){
-      // 全チャンク送信完了 → URLを取得
-      setTimeout(function(){
-        fetch(GAS_URL+'?action=getPhotoUrl&folderId='+encodeURIComponent(folderId)+'&fileName='+encodeURIComponent(fname),{redirect:'follow'})
-        .then(function(r){return r.json();})
-        .then(function(d){
-          if(d&&d.url){cb(null,d.url);}
-          else{cb(null,base64data);}
-        })
-        .catch(function(){cb(null,base64data);});
-      },2000);
+  gasPostJson({
+    action:'uploadPhoto',
+    kind:kind,
+    fileName:fname,
+    mimeType:mime,
+    base64:b64
+  },function(err,res){
+    if(err||!res||res.error||res.status!=='ok'||!res.url){
+      console.warn('写真アップロード失敗',err,res);
+      cb(err||new Error((res&&res.error)||'upload failed'),null);
       return;
     }
-    var url=GAS_URL+'?action=uploadChunk'
-      +'&folderId='+encodeURIComponent(folderId)
-      +'&fileName='+encodeURIComponent(fname)
-      +'&mimeType='+encodeURIComponent(mime)
-      +'&chunk='+encodeURIComponent(chunks[idx])
-      +'&idx='+idx
-      +'&total='+total;
-    fetch(url,{redirect:'follow'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(d&&d.status==='ok'){sendChunk(idx+1);}
-      else{cb(null,base64data);}
-    })
-    .catch(function(){cb(null,base64data);});
-  }
-  toast('📷 写真をアップロード中...');
-  sendChunk(0);
+    cb(null,res.url);
+  });
+}
+
+// GAS POST（レスポンスをJSONとして読み取る版）
+// gasPostはno-corsで送るためレスポンスが読めない。
+// アップロードはURLを受け取る必要があるため、こちらは通常モードでPOSTする。
+function gasPostJson(body, cb){
+  fetch(GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify(body)
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){cb(null,d);})
+  .catch(function(e){cb(e,null);});
 }
 
 // ============================================================
