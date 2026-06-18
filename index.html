@@ -431,7 +431,9 @@ function enterSite(el){
   document.getElementById('hdr-uname').textContent=curUser;
   document.getElementById('hdr-av').textContent=curUser.charAt(0);
   document.getElementById('hdr-site').textContent=sites[i].name;
-  document.getElementById('fab').style.display='flex';
+  // ＋ボタン（独立した品目の新規追加）は管理者のみ使用可能。
+  // 一般ユーザーは「工具追加」ボタン（工具マスターから選んで配分）のみを使う。
+  document.getElementById('fab').style.display=isAdmin?'flex':'none';
   renderSiteTabs(); switchTab(0); showScreen('screen-main');
 }
 
@@ -447,7 +449,7 @@ function renderSiteTabs(){
 function changeSite(el){siteIdx=parseInt(el.dataset.idx);curSiteId=sites[siteIdx].id;filterCat='all';renderSiteTabs();renderContent();}
 function switchTab(i){tabIdx=i;filterCat='all';[0,1,3].forEach(function(j){var b=document.getElementById('btab'+j);if(b)b.className=j===i?'btab active':'btab';});renderContent();}
 function renderContent(){if(tabIdx===0)renderInventory();else if(tabIdx===1)renderHistory();else renderSiteInfo();}
-function onFabTap(){if(isAdmin)openItemEdit(null);else openAddFromMaster();}
+function onFabTap(){if(isAdmin)openItemEdit(null);} // ＋ボタンは管理者専用（一般ユーザーは工具マスターから選ぶ「工具追加」ボタンのみ使用）
 
 // ============================================================
 // 在庫
