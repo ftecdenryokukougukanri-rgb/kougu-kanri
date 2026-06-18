@@ -1356,18 +1356,38 @@ function saveSiteEdit(el){
     window._seMergedTools=null;
   }
   var finalTools=Object.keys(map).map(function(id){return {id:id,qty:map[id]};});
+  var siteId=sites[idx].id;
+
+  // ▼ 会社全体の在庫上限チェック（他現場在庫＋修理中も含めて、マスター総数を超えないか確認）
+  for(var i=0;i<finalTools.length;i++){
+    var e=finalTools[i];
+    var tm=findTM(e.id); if(!tm)continue;
+    var otherSitesQty=items.filter(function(x){return x.ref===e.id&&x.site!==siteId;}).reduce(function(sum,x){return sum+(x.qty||0);},0);
+    var inRepairQty=repairs.filter(function(r){return r.tmId===e.id;}).reduce(function(sum,r){return sum+(r.qty||1);},0);
+    var maxAllowed=tm.total-otherSitesQty-inRepairQty;
+    if(e.qty>maxAllowed){
+      toast('⚠ 「'+tm.name+'」は会社全体の総数（'+tm.total+tm.unit+'）を超えています（この現場に設定できる最大は'+Math.max(0,maxAllowed)+tm.unit+'）');
+      return;
+    }
+  }
+
   sites[idx].tools=finalTools;
   // apply to items: add missing, remove unchecked, update existing qty
-  var siteId=sites[idx].id;
   var toolIds=finalTools.map(function(e){return e.id;});
   // remove items no longer in tools list
   items=items.filter(function(x){return x.site!==siteId||!x.ref||toolIds.indexOf(x.ref)>=0;});
-  // add/update items for each tool
+  // add/update items for each tool（数量変更があれば操作履歴に記録）
+  var siteName=sites[idx].name;
   finalTools.forEach(function(e){
     var tm=findTM(e.id); if(!tm)return;
     var existing=items.find(function(x){return x.site===siteId&&x.ref===e.id;});
-    if(existing){existing.total=tm.total;existing.unit=tm.unit;existing.cat=tm.cat||existing.cat;}
+    var beforeQty=existing?(existing.qty||0):0;
+    if(existing){existing.total=tm.total;existing.unit=tm.unit;existing.cat=tm.cat||existing.cat;existing.qty=e.qty;}
     else{items.push({id:mkId(),name:tm.name,cat:tm.cat||'工具',site:siteId,unit:tm.unit,total:tm.total,qty:e.qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});}
+    var diff=e.qty-beforeQty;
+    if(diff!==0){
+      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:(existing?existing.id:''),name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'現場工具表の設定変更（'+siteName+'）',after:e.qty});
+    }
   });
   closeModal(); toast('現場情報を更新しました'); if(curSiteId)renderContent();
   saveAll(null);
