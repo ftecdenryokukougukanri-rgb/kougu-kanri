@@ -1948,24 +1948,21 @@ function loadAll(){
       if(err) toast('⚠ オフラインモード（データは保存されません）');
       return;
     }
-    // データを上書き（有効なデータのみ）
+    // データを上書き（有効なデータのみ。空配列もGAS側の正しい状態として上書きする）
     if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
     // membersは name が文字列のものだけ使う
-    if(data.members&&data.members.length){
-      var validMem=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
-      if(validMem.length) members=validMem;
+    if(Array.isArray(data.members)){
+      members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
     }
-    if(data.sites&&data.sites.length){
-      var validSites=data.sites.filter(function(s){return s&&typeof s.name==='string';});
-      if(validSites.length) sites=validSites.map(function(s){
+    if(Array.isArray(data.sites)){
+      sites=data.sites.filter(function(s){return s&&typeof s.name==='string';}).map(function(s){
         s.leaders=Array.isArray(s.leaders)?s.leaders:['','',''];
         s.tools=Array.isArray(s.tools)?s.tools:[];
         return s;
       });
     }
-    if(data.TM&&data.TM.length){
-      var validTM=data.TM.filter(function(t){return t&&typeof t.name==='string';});
-      if(validTM.length) TM=validTM.map(function(t){
+    if(Array.isArray(data.TM)){
+      TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
         t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
         t.total=parseInt(t.total)||0;
         return t;
