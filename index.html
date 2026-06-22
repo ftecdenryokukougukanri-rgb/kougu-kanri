@@ -839,15 +839,40 @@ function saveRepair(){
 // ============================================================
 // 会社在庫
 // ============================================================
-function openCompanyStock(){
+function openCompanyStock(){_csKana='';_csKanaRow='';renderCompanyStock();}
+function renderCompanyStock(){
+  var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
+  var activeRows={};
+  kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
+  var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   var h='<div class="modal-title">🏢 会社在庫</div><div class="modal-sub">全工具の会社残数と持出し先現場</div>';
-  h+='<div style="max-height:60vh;overflow-y:auto;margin-bottom:12px">';
+  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
+  KANA_ROWS.forEach(function(r){
+    if(!activeRows[r.head])return;
+    var active=_csKanaRow===r.head;
+    h+='<button class="kana-btn'+(active?' active':'')+'" data-r="'+r.head+'" onclick="setCSKanaRow(this.dataset.r)" style="'+(active?'background:#1a56db;color:#fff;border-color:#1a56db;':'')+'min-width:32px">'+r.head+'</button>';
+  });
+  if(_csKanaRow||_csKana)h+='<button class="kana-btn" onclick="clearCSKanaFilter()" style="color:#dc2626;border-color:#fecaca">✕ 全て</button>';
+  h+='</div>';
+  if(_csKanaRow){
+    var row=KANA_ROWS.find(function(r){return r.head===_csKanaRow;});
+    if(row){
+      h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;padding:6px;background:#eff6ff;border-radius:8px">';
+      row.chars.forEach(function(c){
+        if(kanas.indexOf(c)<0)return;
+        var active=_csKana===c;
+        h+='<button class="kana-btn'+(active?' active':'')+'" data-k="'+c+'" onclick="setCSKana(this.dataset.k)" style="'+(active?'background:#1a56db;color:#fff;border-color:#1a56db;':'background:#fff;')+'min-width:32px">'+c+'</button>';
+      });
+      h+='</div>';
+    }
+  }
+  h+='<div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
   function calcInCompany(tm){
     var atSites=items.filter(function(x){return x.ref===tm.id;}).reduce(function(s,x){return s+(x.qty||0);},0);
     var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
     return Math.max(0,tm.total-atSites-inRep);
   }
-  TM.slice().sort(function(a,b){return calcInCompany(a)-calcInCompany(b);}).forEach(function(tm){
+  disp.slice().sort(function(a,b){return calcInCompany(a)-calcInCompany(b);}).forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
       if(x.ref===tm.id){
@@ -877,6 +902,9 @@ function openCompanyStock(){
   h+='<button class="btn-full" style="background:#f1f5f9;color:#475569" onclick="closeModal()">閉じる</button>';
   showModal(h);
 }
+function clearCSKanaFilter(){_csKana='';_csKanaRow='';renderCompanyStock();}
+function setCSKanaRow(r){_csKanaRow=r;_csKana='';renderCompanyStock();}
+function setCSKana(k){_csKana=k;renderCompanyStock();}
 
 // ============================================================
 // 持出し・返却
@@ -1481,6 +1509,8 @@ function saveMemEdit(){var name=document.getElementById('mem-edit-name').value.t
 // ============================================================
 var _tmKana='';
 var _tmKanaRow='';
+var _csKana='';
+var _csKanaRow='';
 function openToolMasterModal(){_tmKana='';_tmKanaRow='';renderTMModal();}
 function renderTMModal(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
