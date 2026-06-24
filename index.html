@@ -635,6 +635,17 @@ function execTransfer(){
   if(_trQty>item.qty){toast('現場に在庫が足りません（残'+item.qty+item.unit+'）');return;}
   // 移動元から減らす
   item.qty-=_trQty;
+  // 移動元が0になったら現場から削除
+  var srcRemoved=item.qty<=0;
+  if(srcRemoved){
+    var si=items.indexOf(item);
+    if(si>=0)items.splice(si,1);
+    var srcSite=findSite(item.site);
+    if(srcSite&&srcSite.tools&&item.ref){
+      var sti=srcSite.tools.findIndex(function(x){return x.id===item.ref;});
+      if(sti>=0)srcSite.tools.splice(sti,1);
+    }
+  }
   // 移動先のitemを探す or 作る
   var refId=item.ref;
   var target=refId?items.find(function(x){return x.site===toSite&&x.ref===refId;}):null;
