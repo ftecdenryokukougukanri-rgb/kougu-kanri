@@ -1656,6 +1656,7 @@ function searchInput(id,varName,renderFn){
   if(window._isComposing)return;
   clearTimeout(_searchTimer);
   _searchTimer=setTimeout(function(){
+    if(window._isComposing)return; // 変換中なら実行しない
     var el=document.getElementById(id);if(!el)return;
     if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
     renderFn();
