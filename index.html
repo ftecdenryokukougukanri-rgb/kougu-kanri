@@ -596,11 +596,14 @@ function execTransfer(){
   // 移動先のitemを探す or 作る
   var refId=item.ref;
   var target=refId?items.find(function(x){return x.site===toSite&&x.ref===refId;}):null;
+  var targetId;
   if(target){
     target.qty+=_trQty;
+    targetId=target.id;
   } else {
+    targetId=mkId();
     var tm=refId?findTM(refId):null;
-    items.push({id:mkId(),name:item.name,cat:item.cat,site:toSite,unit:item.unit,total:tm?tm.total:item.total,qty:_trQty,mach:item.mach,note:'',photo:item.photo,ref:refId});
+    items.push({id:targetId,name:item.name,cat:item.cat,site:toSite,unit:item.unit,total:tm?tm.total:item.total,qty:_trQty,mach:item.mach,note:'',photo:item.photo,ref:refId});
     // sites.toolsにも追加
     var s=findSite(toSite);
     if(s&&refId){
@@ -610,10 +613,9 @@ function execTransfer(){
   }
   // 履歴記録
   var fromName=findSite(item.site).name, toName=findSite(toSite).name;
+  var targetAfter=target?target.qty:_trQty;
   hist.unshift({ts:Date.now(),type:'out',iid:item.id,name:item.name,site:item.site,amt:_trQty,user:curUser,note:'→'+toName+(_trNote?'（'+_trNote+'）':''),after:item.qty});
-  if(target){
-    hist.unshift({ts:Date.now()+1,type:'in',iid:target.id,name:target.name,site:toSite,amt:_trQty,user:curUser,note:fromName+'より'+(_trNote?'（'+_trNote+'）':''),after:target.qty});
-  }
+  hist.unshift({ts:Date.now()+1,type:'out',iid:targetId,name:item.name,site:toSite,amt:_trQty,user:curUser,note:fromName+'より'+(_trNote?'（'+_trNote+'）':''),after:targetAfter});
   closeModal();
   toast('🚚 '+item.name+' '+_trQty+item.unit+' を'+toName+'へ移動しました');
   renderContent();
