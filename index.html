@@ -456,8 +456,8 @@ function renderSiteTabs(){
   document.getElementById('site-tabs').innerHTML=h;
   document.getElementById('hdr-site').textContent=sites[siteIdx].name;
 }
-function changeSite(el){siteIdx=parseInt(el.dataset.idx);curSiteId=sites[siteIdx].id;filterCat='all';renderSiteTabs();renderContent();}
-function switchTab(i){tabIdx=i;filterCat='all';[0,1,3].forEach(function(j){var b=document.getElementById('btab'+j);if(b)b.className=j===i?'btab active':'btab';});renderContent();}
+function changeSite(el){siteIdx=parseInt(el.dataset.idx);curSiteId=sites[siteIdx].id;filterCat='all';checkFilter='all';renderSiteTabs();renderContent();}
+function switchTab(i){tabIdx=i;filterCat='all';checkFilter='all';[0,1,3].forEach(function(j){var b=document.getElementById('btab'+j);if(b)b.className=j===i?'btab active':'btab';});renderContent();}
 function renderContent(){if(tabIdx===0)renderInventory();else if(tabIdx===1)renderHistory();else renderSiteInfo();}
 function onFabTap(){if(isAdmin)openItemEdit(null);} // ＋ボタンは管理者専用（一般ユーザーは工具マスターから選ぶ「工具追加」ボタンのみ使用）
 
@@ -468,13 +468,35 @@ function renderInventory(){
   var list=items.filter(function(x){return x.site===curSiteId;});
   var h='<button onclick="openAddToolForSite()" style="width:100%;padding:10px 12px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px"><span>＋</span>工具追加</button>';
   if(!list.length){h+='<div class="empty-state"><div style="font-size:36px;margin-bottom:10px">📦</div><div style="font-size:12px">品目がありません<br><span style="font-size:11px;color:#cbd5e1">＋ボタンから追加</span></div></div>';document.getElementById('content').innerHTML=h;return;}
-  h+='<div class="row-header"><span style="font-size:13px;font-weight:700;color:#1e293b">工具一覧</span><span style="font-size:11px;color:#94a3b8">'+list.length+'件</span></div>';
-  list.forEach(function(item){
+  // 準備チェック進捗バー
+  var checkedCount=list.filter(function(x){return x.checked;}).length;
+  var totalCount=list.length;
+  var pct=totalCount?Math.round(checkedCount/totalCount*100):0;
+  var allDone=checkedCount===totalCount;
+  h+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+  h+='<span style="font-size:12px;font-weight:700;color:#1e293b">✅ 準備チェック</span>';
+  h+='<span style="font-size:12px;font-weight:700;color:'+(allDone?'#16a34a':'#1a56db')+'">'+checkedCount+' / '+totalCount+'件'+(allDone?' 完了！':'')+'</span>';
+  h+='</div>';
+  h+='<div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden">';
+  h+='<div style="background:'+(allDone?'#16a34a':'#1a56db')+';height:100%;width:'+pct+'%;border-radius:6px;transition:width 0.3s"></div>';
+  h+='</div>';
+  if(totalCount>0)h+='<div style="display:flex;gap:6px;margin-top:6px"><button onclick="filterCheck(\'all\')" class="chk-filter-btn'+(checkFilter==='all'?' active':'')+'" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:'+(checkFilter==='all'?'#1a56db':'#fff')+';color:'+(checkFilter==='all'?'#fff':'#64748b')+';cursor:pointer;font-family:inherit">全て</button><button onclick="filterCheck(\'unchecked\')" class="chk-filter-btn'+(checkFilter==='unchecked'?' active':'')+'" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:'+(checkFilter==='unchecked'?'#dc2626':'#fff')+';color:'+(checkFilter==='unchecked'?'#fff':'#64748b')+';cursor:pointer;font-family:inherit">未準備 '+(totalCount-checkedCount)+'</button><button onclick="filterCheck(\'checked\')" class="chk-filter-btn'+(checkFilter==='checked'?' active':'')+'" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:'+(checkFilter==='checked'?'#16a34a':'#fff')+';color:'+(checkFilter==='checked'?'#fff':'#64748b')+';cursor:pointer;font-family:inherit">準備済 '+checkedCount+'</button></div>';
+  h+='</div>';
+  var filtered=checkFilter==='unchecked'?list.filter(function(x){return !x.checked;}):checkFilter==='checked'?list.filter(function(x){return x.checked;}):list;
+  h+='<div class="row-header"><span style="font-size:13px;font-weight:700;color:#1e293b">工具一覧</span><span style="font-size:11px;color:#94a3b8">'+filtered.length+'件</span></div>';
+  filtered.forEach(function(item){
     var st=getStatus(item), holders=getHolders(item.id);
     var img=isPhoto(item.photo)?'<img src="'+item.photo+'" alt="">':esc(item.photo||'🔧');
     var ci=getCompanyInfo(item);
     var compLow=item.mach?(ci.inCompany===0):(ci.inCompany<=5);
-    h+='<div class="tool-row" data-id="'+item.id+'" onclick="openDetail(this)">';
+    var ck=item.checked;
+    h+='<div class="tool-row" style="'+(ck?'opacity:0.55;':'')+'" data-id="'+item.id+'" onclick="openDetail(this)">';
+    // チェックボックス
+    h+='<div onclick="event.stopPropagation();toggleCheck(\''+item.id+'\')" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;margin-right:6px;cursor:pointer">';
+    h+='<div style="width:24px;height:24px;border-radius:6px;border:2px solid '+(ck?'#16a34a':'#cbd5e1')+';background:'+(ck?'#16a34a':'#fff')+';display:flex;align-items:center;justify-content:center">';
+    if(ck)h+='<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7l3 3 5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    h+='</div></div>';
     h+='<div class="tool-img">'+img+'</div>';
     // 中央：工具名エリア（flex:1でmin-width:0必須）
     h+='<div style="flex:1;min-width:0;margin-right:8px">';
@@ -497,6 +519,17 @@ function renderInventory(){
   document.getElementById('content').innerHTML=h;
 }
 function setCatFilter(el){filterCat=el.dataset.cat;renderContent();}
+var checkFilter='all';
+var _checkSaveTimer=null;
+function toggleCheck(iid){
+  var item=findItem(iid);if(!item)return;
+  item.checked=item.checked?0:1;
+  renderContent();
+  // デバウンス：連続タップ時は最後の操作から800ms後にまとめて保存
+  if(_checkSaveTimer)clearTimeout(_checkSaveTimer);
+  _checkSaveTimer=setTimeout(function(){saveAll(null,true);},800);
+}
+function filterCheck(f){checkFilter=f;renderContent();}
 function openAddToolForSite(){
   openSiteEdit(siteIdx);
 }
