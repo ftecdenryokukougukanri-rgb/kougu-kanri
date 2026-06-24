@@ -1842,14 +1842,15 @@ function _cropInitImg(){
   img.onload=function(){
     var vw=vp.offsetWidth, vh=vp.offsetHeight;
     var iw=img.naturalWidth, ih=img.naturalHeight;
-    // cover: 短辺がviewportを覆うように
-    var fitScale=Math.max(vw/iw, vh/ih);
-    _cropScale=fitScale;
-    _cropX=(vw-iw*fitScale)/2;
-    _cropY=(vh-ih*fitScale)/2;
+    // contain: 画像全体がviewportに収まるように
+    var containScale=Math.min(vw/iw, vh/ih);
+    var coverScale=Math.max(vw/iw, vh/ih);
+    _cropScale=containScale;
+    _cropX=(vw-iw*containScale)/2;
+    _cropY=(vh-ih*containScale)/2;
     _cropApplyTransform();
     var zs=document.getElementById('crop-zoom');
-    if(zs){zs.min=fitScale;zs.max=fitScale*5;zs.step=fitScale*0.05;zs.value=fitScale;}
+    if(zs){zs.min=containScale*0.5;zs.max=coverScale*5;zs.step=containScale*0.05;zs.value=containScale;}
   };
   if(img.complete&&img.naturalWidth)img.onload();
 }
