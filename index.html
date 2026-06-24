@@ -905,7 +905,7 @@ function renderCompanyStock(){
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
   var h='<div class="modal-title">🏢 会社在庫</div><div class="modal-sub">全工具の会社残数と持出し先現場</div>';
-  h+='<input id="srch-cs" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_csSearch)+'" oninput="searchInput(\'srch-cs\',\'_csSearch\',renderCompanyStock)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-cs\',\'_csSearch\',renderCompanyStock)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-cs" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_csSearch)+'" oninput="searchInput(\'srch-cs\',\'_csSearch\',updateCSResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-cs\',\'_csSearch\',updateCSResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -926,7 +926,47 @@ function renderCompanyStock(){
       h+='</div>';
     }
   }
-  h+='<div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
+  h+='<div id="cs-results"><div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
+  function calcInCompany(tm){
+    var atSites=items.filter(function(x){return x.ref===tm.id;}).reduce(function(s,x){return s+(x.qty||0);},0);
+    var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
+    return Math.max(0,tm.total-atSites-inRep);
+  }
+  disp.slice().sort(function(a,b){return calcInCompany(a)-calcInCompany(b);}).forEach(function(tm){
+    var totalAtSites=0, sitesWithTool=[];
+    items.forEach(function(x){
+      if(x.ref===tm.id){
+        totalAtSites+=x.qty||0;
+        if((x.qty||0)>0){var s=findSite(x.site);if(s)sitesWithTool.push({name:s.name,qty:x.qty});}
+      }
+    });
+    var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
+    var inCompany=Math.max(0,tm.total-totalAtSites-inRep);
+    var low=inCompany<=5;
+    var photo=tm.photo||'';
+    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:48px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:10px">':'<div style="width:48px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-right:10px">'+esc(photo||'🔧')+'</div>';
+    h+='<div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9">'+img;
+    h+='<div style="flex:1;min-width:0">';
+    h+='<div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(tm.name)+'</div>';
+    if(sitesWithTool.length){h+='<div style="font-size:10px;color:#64748b;margin-top:2px">📤 '+sitesWithTool.map(function(s){return esc(s.name)+' '+s.qty+esc(tm.unit);}).join(' ／ ')+'</div>';}
+    else{h+='<div style="font-size:10px;color:#94a3b8;margin-top:2px">どの現場にも持出しなし</div>';}
+    if(inRep>0)h+='<div style="font-size:10px;color:#c2410c;margin-top:2px;font-weight:600">🔧 修理中 '+inRep+esc(tm.unit)+'</div>';
+    h+='</div>';
+    h+='<div style="text-align:right;flex-shrink:0;margin-left:8px">';
+    h+='<div style="font-size:9px;color:'+(low?'#b91c1c':'#64748b')+';font-weight:600">会社残数</div>';
+    h+='<div style="font-size:22px;font-weight:700;color:'+(low?'#dc2626':'#15803d')+';line-height:1">'+inCompany+'</div>';
+    h+='<div style="font-size:9px;color:#94a3b8">'+esc(tm.unit)+' / 総'+tm.total+'</div>';
+    h+='</div></div>';
+  });
+  h+='</div></div>';
+  h+='<button class="btn-full" style="background:#f1f5f9;color:#475569" onclick="closeModal()">閉じる</button>';
+  showModal(h);
+}
+function updateCSResults(){
+  var el=document.getElementById('cs-results');if(!el)return;
+  var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
+  if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
+  var h='<div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
   function calcInCompany(tm){
     var atSites=items.filter(function(x){return x.ref===tm.id;}).reduce(function(s,x){return s+(x.qty||0);},0);
     var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
@@ -959,8 +999,7 @@ function renderCompanyStock(){
     h+='</div></div>';
   });
   h+='</div>';
-  h+='<button class="btn-full" style="background:#f1f5f9;color:#475569" onclick="closeModal()">閉じる</button>';
-  showModal(h);
+  el.innerHTML=h;
 }
 function clearCSKanaFilter(){_csKana='';_csKanaRow='';renderCompanyStock();}
 function setCSKanaRow(r){_csKanaRow=r;_csKana='';renderCompanyStock();}
@@ -1353,7 +1392,7 @@ function renderSiteToolPicker(stools){
   var disp=window._seKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(window._seKana)>=0;}):TM;
   if(window._seSearch)disp=disp.filter(function(t){return matchSearch(t.name,window._seSearch);});
   var h='<div style="margin-bottom:4px"><label class="lbl" style="margin-bottom:6px">使用する工具</label>';
-  h+='<input id="srch-se" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(window._seSearch||'')+'" oninput="searchInput(\'srch-se\',\'_seSearch\',reRenderSitePicker)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-se\',\'_seSearch\',reRenderSitePicker)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-se" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(window._seSearch||'')+'" oninput="searchInput(\'srch-se\',\'_seSearch\',updateSEResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-se\',\'_seSearch\',updateSEResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1382,7 +1421,7 @@ function renderSiteToolPicker(stools){
     var photo=t.photo||'';
     var maxQty=Math.max(0,getSiteToolMaxQty(t.id,curSiteIdForCalc));
     var img=isPhoto(photo)?'<img src="'+photo+'" style="width:44px;height:28px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:9px;flex-shrink:0">':'<div style="width:28px;height:28px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:9px">'+esc(photo||'🔧')+'</div>';
-    h+='<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9">';
+    h+='<div class="se-tool-row" data-tname="'+esc(t.name)+'" style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9">';
     h+=img;
     h+='<input type="checkbox" class="se-tool-chk" value="'+t.id+'"'+(chk?' checked':'')+' style="width:16px;height:16px;margin-right:9px;accent-color:#1a56db;flex-shrink:0" onchange="seToolChkChange(this)">';
     var tc=t.cat||'工具';var tcStyle=tc==='工具'?'background:#e8f0ff;color:#1241a8':tc==='機械'?'background:#f1f5f9;color:#475569':tc==='保護具'?'background:#f0fdf4;color:#166534':tc==='消耗品'?'background:#fff7ed;color:#9a3412':'background:#fdf4ff;color:#7e22ce';
@@ -1418,6 +1457,13 @@ function seToolChkChange(el){
   });
 }
 function clearSeKana(){window._seKana='';window._seKanaRow='';reRenderSitePicker();}
+function updateSEResults(){
+  var q=window._seSearch||'';
+  document.querySelectorAll('.se-tool-row').forEach(function(row){
+    var name=row.getAttribute('data-tname')||'';
+    row.style.display=matchSearch(name,q)?'flex':'none';
+  });
+}
 function setSeKanaRow(r){window._seKanaRow=r;window._seKana='';reRenderSitePicker();}
 function setSeKana(k){window._seKana=k;reRenderSitePicker();}
 function collectSeTools(){
@@ -1622,7 +1668,7 @@ function renderTMModal(){
   var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
   if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
   var h='<div class="modal-title">🔧 工具管理（全体）</div><div class="modal-sub">全体の工具・写真・総数を管理します</div>';
-  h+='<input id="srch-tm" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_tmSearch)+'" oninput="searchInput(\'srch-tm\',\'_tmSearch\',renderTMModal)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-tm\',\'_tmSearch\',renderTMModal)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-tm" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_tmSearch)+'" oninput="searchInput(\'srch-tm\',\'_tmSearch\',updateTMResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-tm\',\'_tmSearch\',updateTMResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1643,7 +1689,27 @@ function renderTMModal(){
       h+='</div>';
     }
   }
-  h+='<div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:14px;overflow:hidden;max-height:50vh;overflow-y:auto">';
+  h+='<div id="tm-results"><div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:14px;overflow:hidden;max-height:50vh;overflow-y:auto">';
+  if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
+  disp.forEach(function(t){
+    var photo=t.photo||'';
+    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:64px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:64px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;margin-right:11px">'+esc(photo||'🔧')+'</div>';
+    h+='<div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #f1f5f9">'+img;
+    h+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#1e293b">'+esc(t.name)+'</div>';
+    h+='<div style="font-size:11px;color:#64748b;margin-top:1px">総数 '+t.total+esc(t.unit)+'</div></div>';
+    h+='<button data-tmid="'+t.id+'" onclick="openTMEdit(this)" style="padding:6px 12px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0">編集</button>';
+    h+='</div>';
+  });
+  h+='</div></div>';
+  h+='<button class="btn-full" style="background:#1a56db;color:#fff" onclick="openAddTM()">＋ 新しい工具を追加</button>';
+  h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">← 戻る</button></div>';
+  showModal(h);
+}
+function updateTMResults(){
+  var el=document.getElementById('tm-results');if(!el)return;
+  var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
+  if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
+  var h='<div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:14px;overflow:hidden;max-height:50vh;overflow-y:auto">';
   if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
     var photo=t.photo||'';
@@ -1655,9 +1721,7 @@ function renderTMModal(){
     h+='</div>';
   });
   h+='</div>';
-  h+='<button class="btn-full" style="background:#1a56db;color:#fff" onclick="openAddTM()">＋ 新しい工具を追加</button>';
-  h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">← 戻る</button></div>';
-  showModal(h);
+  el.innerHTML=h;
 }
 function clearTmKanaFilter(){_tmKana='';_tmKanaRow='';renderTMModal();}
 function setTmKanaRow(r){_tmKanaRow=r;_tmKana='';renderTMModal();}
@@ -1754,7 +1818,7 @@ function renderAddFromMaster(){
   var existSet={};
   items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
   var h='<div class="modal-title">工具を追加</div><div class="modal-sub">この現場の工具表から選んで追加します</div>';
-  h+='<input id="srch-add" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_addSearch)+'" oninput="searchInput(\'srch-add\',\'_addSearch\',renderAddFromMaster)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-add\',\'_addSearch\',renderAddFromMaster)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-add" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_addSearch)+'" oninput="searchInput(\'srch-add\',\'_addSearch\',updateAddResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-add\',\'_addSearch\',updateAddResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   if(!siteTM.length){
     h+='<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">この現場の工具表が未設定です<br>管理者に工具表の設定を依頼してください</div>';
     h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">閉じる</button></div>';
@@ -1767,14 +1831,32 @@ function renderAddFromMaster(){
     if(addKana)h+='<button class="kana-btn" onclick="clearAddKana()">✕</button>';
     h+='</div>';
   }
+  h+='<div id="add-results">';
   h+='<label class="lbl">工具を選択</label>';
   h+='<select class="sel" id="add-tm-sel" onchange="addTMSelChange()">';
   h+='<option value="">工具を選択してください</option>';
   filtered.forEach(function(t){h+='<option value="'+t.id+'">'+esc(t.name)+'（'+t.total+t.unit+'）'+(existSet[t.id]?' ★登録済':'')+'</option>';});
   h+='</select>';
   h+='<div id="add-tm-detail"></div>';
+  h+='</div>';
   h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">キャンセル</button></div>';
   showModal(h);
+}
+function updateAddResults(){
+  var el=document.getElementById('add-results');if(!el)return;
+  var site=findSite(curSiteId), stools=(site&&site.tools)||[];
+  var siteTM=TM.filter(function(t){return stools.indexOf(t.id)>=0;});
+  var filtered=addKana?siteTM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(addKana)>=0;}):siteTM;
+  if(_addSearch)filtered=filtered.filter(function(t){return matchSearch(t.name,_addSearch);});
+  var existSet={};
+  items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
+  var h='<label class="lbl">工具を選択</label>';
+  h+='<select class="sel" id="add-tm-sel" onchange="addTMSelChange()">';
+  h+='<option value="">工具を選択してください</option>';
+  filtered.forEach(function(t){h+='<option value="'+t.id+'">'+esc(t.name)+'（'+t.total+t.unit+'）'+(existSet[t.id]?' ★登録済':'')+'</option>';});
+  h+='</select>';
+  h+='<div id="add-tm-detail"></div>';
+  el.innerHTML=h;
 }
 function setAddKana2(k){addKana=k;renderAddFromMaster();}
 function setAddKana(el){addKana=activeKanas()[parseInt(el.dataset.idx)];renderAddFromMaster();}
