@@ -1652,14 +1652,23 @@ function matchSearch(name, query){
   return n.indexOf(q)>=0;
 }
 var _searchTimer=null;
+function _getSearchVar(varName){return varName.indexOf('.')<0?window[varName]:window[varName.split('.')[1]];}
+function _setSearchVar(varName,val){if(varName.indexOf('.')<0){window[varName]=val;}else{window[varName.split('.')[1]]=val;}}
+function _needsRender(oldVal,newVal){
+  // 両方2文字未満なら描画不要（どちらも全件表示で変化なし）
+  if((!oldVal||oldVal.length<2)&&(!newVal||newVal.length<2))return false;
+  return oldVal!==newVal;
+}
 function searchInput(id,varName,renderFn){
   if(window._isComposing)return;
   clearTimeout(_searchTimer);
   _searchTimer=setTimeout(function(){
-    if(window._isComposing)return; // 変換中なら実行しない
+    if(window._isComposing)return;
     var el=document.getElementById(id);if(!el)return;
-    if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
-    renderFn();
+    var oldVal=_getSearchVar(varName)||'';
+    var newVal=el.value;
+    _setSearchVar(varName,newVal);
+    if(_needsRender(oldVal,newVal))renderFn();
   },300);
 }
 var _isComposing=false;
@@ -1668,8 +1677,10 @@ function onCompEnd(id,varName,renderFn){
   _isComposing=false;
   clearTimeout(_searchTimer);
   var el=document.getElementById(id);if(!el)return;
-  if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
-  renderFn();
+  var oldVal=_getSearchVar(varName)||'';
+  var newVal=el.value;
+  _setSearchVar(varName,newVal);
+  if(_needsRender(oldVal,newVal))renderFn();
 }
 function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
 function renderTMModal(){
