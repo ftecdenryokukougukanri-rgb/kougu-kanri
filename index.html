@@ -974,15 +974,15 @@ function execAdjust(){
   } else {
     if(amt>item.qty){toast('現場に返却できる工具がありません（現場'+item.qty+item.unit+'）');return;}
     item.qty-=amt;
-    // 返却で残数0になったら現場から削除
-    if(item.qty<=0){
-      var idx=items.indexOf(item);
-      if(idx>=0)items.splice(idx,1);
-      var s=findSite(item.site);
-      if(s&&s.tools&&item.ref){
-        var ti=s.tools.findIndex(function(x){return x.id===item.ref;});
-        if(ti>=0)s.tools.splice(ti,1);
-      }
+  }
+  var itemRemoved=(pendType==='in'&&item.qty<=0);
+  if(itemRemoved){
+    var idx=items.indexOf(item);
+    if(idx>=0)items.splice(idx,1);
+    var s=findSite(item.site);
+    if(s&&s.tools&&item.ref){
+      var ti=s.tools.findIndex(function(x){return x.id===item.ref;});
+      if(ti>=0)s.tools.splice(ti,1);
     }
   }
   var now=new Date(), ds=now.getFullYear()+'/'+(now.getMonth()+1)+'/'+now.getDate(), ts=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
@@ -991,8 +991,9 @@ function execAdjust(){
   window._adjNote=''; closeModal();
   toast((pendType==='out'?'📤':'📥')+' '+ds+' '+ts+' '+curUser+'が'+item.name+' '+amt+item.unit+(pendType==='out'?'を持出し':'を返却'));
   renderContent();
-  // GASへ差分送信
-  gasAdjust(hEntry, item.qty, null);
+  // 削除が発生した場合はsaveAll（行ごと消す）、それ以外は差分送信
+  if(itemRemoved){saveAll(null);}
+  else{gasAdjust(hEntry, item.qty, null);}
 }
 
 // ============================================================
