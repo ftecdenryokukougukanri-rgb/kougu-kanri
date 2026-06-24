@@ -471,7 +471,6 @@ function renderInventory(){
     h+='<div style="flex:1;min-width:0;margin-right:8px">';
     h+='<div style="font-size:16px;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(item.name)+'</div>';
     if(item.note)h+='<div style="font-size:10px;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(item.note)+'</div>';
-    if(holders.length&&item.qty>0)h+='<div style="font-size:11px;color:#f97316;margin-top:3px;font-weight:600">📤 '+holders.length+'名持出中</div>';
     h+='</div>';
     // 右パネル：固定幅2列
     h+='<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;width:88px">';
@@ -984,7 +983,7 @@ function openItemHistory(itemId){
   var html='<div class="modal-title">'+esc(item.name)+' の履歴</div>';
   html+='<div class="modal-sub">総保有数 '+item.total+esc(item.unit)+' ／ 現在残 '+item.qty+esc(item.unit)+'</div>';
   if(!hs.length){html+='<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">履歴がありません</div>';}
-  else{hs.forEach(function(h){var io=h.type==='out',ib=io?'#fff5f5':'#f0fdf4',em=io?'📤':'📥',vb=io?'持出し':'返却',cl=io?'#dc2626':'#16a34a';html+='<div style="display:flex;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9"><div style="width:32px;height:32px;border-radius:50%;background:'+ib+';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:10px">'+em+'</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(h.user)+'</div><div style="font-size:11px;color:#64748b;margin-top:1px">'+vb+' ・ '+fmtFull(h.ts)+'</div>';if(h.note)html+='<div style="font-size:10px;background:#f8fafc;padding:2px 8px;border-radius:4px;margin-top:3px;display:inline-block;color:#64748b">'+esc(h.note)+'</div>';html+='</div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:'+cl+'">'+h.amt+esc(item.unit)+'</div><div style="font-size:10px;color:#94a3b8">残 '+h.after+'</div></div></div>';});}
+  else{hs.forEach(function(h){var io=h.type==='out'||h.type==='set_in',ib=io?'#fff5f5':'#f0fdf4',em=io?'📤':'📥',vb=io?'持出し':'返却',cl=io?'#dc2626':'#16a34a';html+='<div style="display:flex;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9"><div style="width:32px;height:32px;border-radius:50%;background:'+ib+';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:10px">'+em+'</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(h.user)+'</div><div style="font-size:11px;color:#64748b;margin-top:1px">'+vb+' ・ '+fmtFull(h.ts)+'</div>';if(h.note)html+='<div style="font-size:10px;background:#f8fafc;padding:2px 8px;border-radius:4px;margin-top:3px;display:inline-block;color:#64748b">'+esc(h.note)+'</div>';html+='</div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:'+cl+'">'+h.amt+esc(item.unit)+'</div><div style="font-size:10px;color:#94a3b8">残 '+h.after+'</div></div></div>';});}
   html+='<div class="modal-actions" style="margin-top:16px"><button class="btn-primary" style="flex:1" data-id="'+itemId+'" onclick="backToDetail(this)">← 戻る</button></div>';
   showModal(html);
 }
@@ -1135,7 +1134,7 @@ function renderHistory(){
   if(!hs.length){html+='<div class="empty-state"><div style="font-size:36px;margin-bottom:10px">📋</div><div style="font-size:12px">履歴がありません</div></div>';document.getElementById('content').innerHTML=html;return;}
   hs.forEach(function(h){
     var item=findItem(h.iid), unit=item?item.unit:'';
-    var io=h.type==='out',em=io?'📤':'📥',ac=io?'#dc2626':'#16a34a',vb=io?'を持出し':'を返却';
+    var io=h.type==='out'||h.type==='set_in',em=io?'📤':'📥',ac=io?'#dc2626':'#16a34a',vb=io?'を持出し':'を返却';
     html+='<div class="hist-card"><div style="width:32px;height:32px;border-radius:50%;background:'+(io?'#fff5f5':'#f0fdf4')+';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:9px">'+em+'</div>';
     html+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(h.user)+'</div>';
     html+='<div style="font-size:12px;color:#475569;margin-top:1px">'+esc(h.name)+' <strong style="color:'+ac+'">'+h.amt+esc(unit)+'</strong>'+vb+'</div>';
@@ -1427,7 +1426,7 @@ function saveSiteEdit(el){
     else{itemId=mkId();items.push({id:itemId,name:tm.name,cat:tm.cat||'工具',site:siteId,unit:tm.unit,total:tm.total,qty:e.qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});}
     var diff=e.qty-beforeQty;
     if(diff!==0){
-      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:itemId,name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'現場工具表の設定変更（'+siteName+'）',after:e.qty});
+      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:itemId,name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'',after:e.qty});
     }
   });
   closeModal(); toast('現場情報を更新しました'); if(curSiteId)renderContent();
