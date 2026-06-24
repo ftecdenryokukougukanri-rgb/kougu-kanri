@@ -897,13 +897,15 @@ function saveRepair(){
 // ============================================================
 // 会社在庫
 // ============================================================
-function openCompanyStock(){_csKana='';_csKanaRow='';renderCompanyStock();}
+function openCompanyStock(){_csKana='';_csKanaRow='';_csSearch='';renderCompanyStock();}
 function renderCompanyStock(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
+  if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
   var h='<div class="modal-title">🏢 会社在庫</div><div class="modal-sub">全工具の会社残数と持出し先現場</div>';
+  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_csSearch)+'" oninput="_csSearch=this.value;renderCompanyStock();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1581,13 +1583,34 @@ var _tmKana='';
 var _tmKanaRow='';
 var _csKana='';
 var _csKanaRow='';
-function openToolMasterModal(){_tmKana='';_tmKanaRow='';renderTMModal();}
+var _tmSearch='';
+var _csSearch='';
+var _addSearch='';
+// 半角カナ→全角カナ変換＋濁点無視＋小文字化（検索用）
+function normalizeStr(s){
+  var str=String(s||'').replace(/[\uFF65-\uFF9F]/g,function(c){
+    var code=c.charCodeAt(0);
+    var map='\u30F2\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30C3\u30FC\u30A2\u30A4\u30A6\u30A8\u30AA\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CA\u30CB\u30CC\u30CD\u30CE\u30CF\u30D2\u30D5\u30D8\u30DB\u30DE\u30DF\u30E0\u30E1\u30E2\u30E4\u30E6\u30E8\u30E9\u30EA\u30EB\u30EC\u30ED\u30EF\u30F3\u3099\u309A';
+    return map[code-0xFF65]||c;
+  });
+  // NFD分解でガ→カ+゙にしてから濁点・半濁点を除去（ガ＝カとして検索可能に）
+  if(str.normalize)str=str.normalize('NFD');
+  return str.replace(/[\u3099\u309A]/g,'').toLowerCase();
+}
+function matchSearch(name, query){
+  if(!query)return true;
+  var n=normalizeStr(name), q=normalizeStr(query);
+  return n.indexOf(q)>=0;
+}
+function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
 function renderTMModal(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
+  if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
   var h='<div class="modal-title">🔧 工具管理（全体）</div><div class="modal-sub">全体の工具・写真・総数を管理します</div>';
+  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_tmSearch)+'" oninput="_tmSearch=this.value;renderTMModal();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1708,16 +1731,18 @@ function saveTM(){
 // ============================================================
 // 現場への工具追加（マスターから）
 // ============================================================
-function openAddFromMaster(){addKana='';renderAddFromMaster();}
+function openAddFromMaster(){addKana='';_addSearch='';renderAddFromMaster();}
 function renderAddFromMaster(){
   var site=findSite(curSiteId), stools=(site&&site.tools)||[];
   // 現場の工具表に登録された工具のみ対象
   var siteTM=TM.filter(function(t){return stools.indexOf(t.id)>=0;});
   var kanas=siteTM.reduce(function(acc,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&acc.indexOf(y)<0)acc.push(y);});return acc;},[]).sort();
   var filtered=addKana?siteTM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(addKana)>=0;}):siteTM;
+  if(_addSearch)filtered=filtered.filter(function(t){return matchSearch(t.name,_addSearch);});
   var existSet={};
   items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
   var h='<div class="modal-title">工具を追加</div><div class="modal-sub">この現場の工具表から選んで追加します</div>';
+  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_addSearch)+'" oninput="_addSearch=this.value;renderAddFromMaster();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   if(!siteTM.length){
     h+='<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">この現場の工具表が未設定です<br>管理者に工具表の設定を依頼してください</div>';
     h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">閉じる</button></div>';
