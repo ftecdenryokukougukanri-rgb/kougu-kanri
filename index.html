@@ -491,7 +491,7 @@ function renderInventory(){
     var ci=getCompanyInfo(item);
     var compLow=item.mach?(ci.inCompany===0):(ci.inCompany<=5);
     var ck=item.checked;
-    h+='<div class="tool-row" style="'+(ck?'opacity:0.55;':'')+'" data-id="'+item.id+'" onclick="openDetail(this)">';
+    h+='<div class="tool-row" data-id="'+item.id+'" onclick="openDetail(this)">';
     // チェックボックス
     h+='<div onclick="event.stopPropagation();toggleCheck(\''+item.id+'\')" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;margin-right:6px;cursor:pointer">';
     h+='<div style="width:24px;height:24px;border-radius:6px;border:2px solid '+(ck?'#16a34a':'#cbd5e1')+';background:'+(ck?'#16a34a':'#fff')+';display:flex;align-items:center;justify-content:center">';
