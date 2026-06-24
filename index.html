@@ -1651,17 +1651,25 @@ function matchSearch(name, query){
   var n=normalizeStr(name), q=normalizeStr(query);
   return n.indexOf(q)>=0;
 }
+var _searchTimer=null;
 function searchInput(id,varName,renderFn){
-  if(window._isComposing)return; // IME変換中はスキップ
-  var el=document.getElementById(id);if(!el)return;
-  var pos=el.selectionStart;
-  if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
-  renderFn();
-  setTimeout(function(){var e=document.getElementById(id);if(e){e.focus();try{e.setSelectionRange(pos,pos);}catch(x){}}},0);
+  if(window._isComposing)return;
+  clearTimeout(_searchTimer);
+  _searchTimer=setTimeout(function(){
+    var el=document.getElementById(id);if(!el)return;
+    if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
+    renderFn();
+  },300);
 }
 var _isComposing=false;
 function onCompStart(){_isComposing=true;}
-function onCompEnd(id,varName,renderFn){_isComposing=false;searchInput(id,varName,renderFn);}
+function onCompEnd(id,varName,renderFn){
+  _isComposing=false;
+  clearTimeout(_searchTimer);
+  var el=document.getElementById(id);if(!el)return;
+  if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
+  renderFn();
+}
 function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
 function renderTMModal(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
