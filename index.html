@@ -991,9 +991,9 @@ function execAdjust(){
   window._adjNote=''; closeModal();
   toast((pendType==='out'?'📤':'📥')+' '+ds+' '+ts+' '+curUser+'が'+item.name+' '+amt+item.unit+(pendType==='out'?'を持出し':'を返却'));
   renderContent();
-  // 削除が発生した場合はsaveAll（行ごと消す）、それ以外は差分送信
-  if(itemRemoved){saveAll(null);}
-  else{gasAdjust(hEntry, item.qty, null);}
+  // 削除が発生した場合は差分送信（即時）＋裏でsaveAll（行削除）、通常は差分送信のみ
+  gasAdjust(hEntry, item.qty, null);
+  if(itemRemoved){saveAll(null, true);}
 }
 
 // ============================================================
@@ -2087,9 +2087,9 @@ function refreshData(){
 // ============================================================
 // 全データ保存（操作後に呼ぶ）
 // ============================================================
-function saveAll(cb){
+function saveAll(cb, silent){
   if(!GAS_LOADED) { if(cb)cb(); return; } // オフライン時はスキップ
-  showLoading('保存中...');
+  if(!silent)showLoading('保存中...');
   // 写真(base64)はスプレッドシートに保存しない（URLのみ保存）
   gasPost({
     action:'saveAll',
@@ -2103,10 +2103,10 @@ function saveAll(cb){
       repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
     }
   },function(err,res){
-    hideLoading();
+    if(!silent)hideLoading();
     if(err||!res||res.status!=='ok'){
       console.warn('保存失敗',err,res);
-      toast('⚠ 保存に失敗しました（通信エラー）');
+      if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
     }
     if(cb)cb();
   });
