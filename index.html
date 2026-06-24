@@ -122,7 +122,10 @@ input,select{font-family:inherit}
 <div class="scr hidden" id="screen-site">
   <div class="hdr hdr-bg">
     <div class="hdr-l"><div class="t1">現場を選択</div><div class="t2" id="site-sub"></div></div>
-    <button class="hdr-back" onclick="goToName()">← 戻る</button>
+    <div style="display:flex;gap:6px">
+      <button class="hdr-back" onclick="refreshData()" style="padding:8px 12px" title="データ更新">🔄</button>
+      <button class="hdr-back" onclick="goToName()">← 戻る</button>
+    </div>
   </div>
   <div class="scrollable">
     <button onclick="openRepairModal()" style="width:100%;display:flex;align-items:center;padding:14px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;margin-bottom:8px;cursor:pointer;font-family:inherit;text-align:left">
@@ -143,7 +146,10 @@ input,select{font-family:inherit}
 <div class="scr hidden" id="screen-admin">
   <div class="hdr hdr-bg">
     <div class="hdr-l"><div class="t1">管理者メニュー</div><div class="t2">管理者でログイン中</div></div>
-    <button class="hdr-back" onclick="goToName()">← 戻る</button>
+    <div style="display:flex;gap:6px">
+      <button class="hdr-back" onclick="refreshData()" style="padding:8px 12px" title="データ更新">🔄</button>
+      <button class="hdr-back" onclick="goToName()">← 戻る</button>
+    </div>
   </div>
   <div class="scrollable">
     <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px">管理メニュー</div>
@@ -179,13 +185,16 @@ input,select{font-family:inherit}
 <div class="scr hidden" id="screen-main">
   <div class="hdr hdr-bg">
     <div class="hdr-l"><div class="t1">現場工具管理</div><div class="t2" id="hdr-site"></div></div>
-    <button class="hdr-user" onclick="confirmLogout()" style="flex-direction:column;align-items:flex-end;padding:5px 10px;gap:2px;border-radius:14px">
-      <div style="display:flex;align-items:center;gap:5px">
-        <div class="av" id="hdr-av" style="color:#1a56db">?</div>
-        <span id="hdr-uname">---</span>
-      </div>
-      <span style="font-size:9px;opacity:0.75">タップしてログアウト</span>
-    </button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="hdr-back" onclick="refreshData()" style="padding:8px 12px" title="データ更新">🔄</button>
+      <button class="hdr-user" onclick="confirmLogout()" style="flex-direction:column;align-items:flex-end;padding:5px 10px;gap:2px;border-radius:14px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <div class="av" id="hdr-av" style="color:#1a56db">?</div>
+          <span id="hdr-uname">---</span>
+        </div>
+        <span style="font-size:9px;opacity:0.75">タップしてログアウト</span>
+      </button>
+    </div>
   </div>
   <div class="main-body">
     <div class="site-tabs" id="site-tabs"></div>
@@ -2019,6 +2028,48 @@ function loadAll(){
     applyStyle();
     renderNameScreen();
     toast('✅ データを読み込みました');
+  });
+}
+
+// ============================================================
+// データ更新（現在の画面を維持したまま再読み込み）
+// ============================================================
+function refreshData(){
+  showLoading('データを更新しています...');
+  gasGet({action:'getAll'},function(err,data){
+    hideLoading();
+    if(err||!data||data.error){
+      toast('⚠ 更新に失敗しました');
+      return;
+    }
+    if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
+    if(Array.isArray(data.members)){
+      members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
+    }
+    if(Array.isArray(data.sites)){
+      sites=data.sites.filter(function(s){return s&&typeof s.name==='string';}).map(function(s){
+        s.leaders=Array.isArray(s.leaders)?s.leaders:['','',''];
+        s.tools=Array.isArray(s.tools)?s.tools:[];
+        return s;
+      });
+    }
+    if(Array.isArray(data.TM)){
+      TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
+        t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
+        t.total=parseInt(t.total)||0;
+        return t;
+      });
+    }
+    if(data.items&&Array.isArray(data.items)) items=data.items;
+    if(data.hist&&Array.isArray(data.hist)) hist=data.hist;
+    if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs;
+    GAS_LOADED=true;
+    applyStyle();
+    // 現在の画面を再描画
+    if(curSiteId){renderSiteTabs();renderContent();}
+    else if(!document.getElementById('screen-site').classList.contains('hidden')){renderSiteScreen();}
+    else if(!document.getElementById('screen-admin').classList.contains('hidden')){updateCnts();}
+    toast('✅ 最新データに更新しました');
   });
 }
 
