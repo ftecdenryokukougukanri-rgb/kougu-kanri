@@ -932,7 +932,7 @@ function renderCompanyStock(){
     var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
     return Math.max(0,tm.total-atSites-inRep);
   }
-  disp.slice().sort(function(a,b){return calcInCompany(a)-calcInCompany(b);}).forEach(function(tm){
+  disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
       if(x.ref===tm.id){
@@ -972,7 +972,7 @@ function updateCSResults(){
     var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
     return Math.max(0,tm.total-atSites-inRep);
   }
-  disp.slice().sort(function(a,b){return calcInCompany(a)-calcInCompany(b);}).forEach(function(tm){
+  disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
       if(x.ref===tm.id){
