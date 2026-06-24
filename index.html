@@ -1320,7 +1320,7 @@ function delSiteFromBtn(el){showDeleteConfirm('site',el.dataset.id,el.dataset.na
 function openSiteEdit(idx){
   var s=sites[idx];
   var stools=s.tools||[];
-  window._seIdx=idx; window._seKana=''; window._seKanaRow=''; window._seMergedTools=null;
+  window._seIdx=idx; window._seKana=''; window._seKanaRow=''; window._seMergedTools=null; window._seSearch='';
   var h='<div class="modal-title">'+(isAdmin?'現場編集：':'工具追加：')+esc(s.name)+'</div>';
   if(isAdmin){
     function mkSel(id,val){var h='<select id="'+id+'" class="sel"><option value="">（未設定）</option>';members.forEach(function(m){if(!m.admin)h+='<option'+(m.name===val?' selected':'')+'>'+esc(m.name)+'</option>';});return h+'</select>';}
@@ -1351,7 +1351,9 @@ function renderSiteToolPicker(stools){
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=window._seKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(window._seKana)>=0;}):TM;
+  if(window._seSearch)disp=disp.filter(function(t){return matchSearch(t.name,window._seSearch);});
   var h='<div style="margin-bottom:4px"><label class="lbl" style="margin-bottom:6px">使用する工具</label>';
+  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(window._seSearch||'')+'" oninput="window._seSearch=this.value;reRenderSitePicker();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1593,13 +1595,38 @@ function normalizeStr(s){
     var map='\u30F2\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30C3\u30FC\u30A2\u30A4\u30A6\u30A8\u30AA\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CA\u30CB\u30CC\u30CD\u30CE\u30CF\u30D2\u30D5\u30D8\u30DB\u30DE\u30DF\u30E0\u30E1\u30E2\u30E4\u30E6\u30E8\u30E9\u30EA\u30EB\u30EC\u30ED\u30EF\u30F3\u3099\u309A';
     return map[code-0xFF65]||c;
   });
-  // NFD分解でガ→カ+゙にしてから濁点・半濁点を除去（ガ＝カとして検索可能に）
   if(str.normalize)str=str.normalize('NFD');
   return str.replace(/[\u3099\u309A]/g,'').toLowerCase();
+}
+// ローマ字→カタカナ変換（検索用・簡易版）
+function romajiToKana(s){
+  var str=s.toLowerCase();
+  var table=[['sha','シャ'],['shi','シ'],['shu','シュ'],['sho','ショ'],['chi','チ'],['tsu','ツ'],['cha','チャ'],['chu','チュ'],['cho','チョ'],['tchi','ッチ'],['cchi','ッチ'],
+    ['kya','キャ'],['kyu','キュ'],['kyo','キョ'],['nya','ニャ'],['nyu','ニュ'],['nyo','ニョ'],['hya','ヒャ'],['hyu','ヒュ'],['hyo','ヒョ'],['mya','ミャ'],['myu','ミュ'],['myo','ミョ'],['rya','リャ'],['ryu','リュ'],['ryo','リョ'],
+    ['gya','ギャ'],['gyu','ギュ'],['gyo','ギョ'],['bya','ビャ'],['byu','ビュ'],['byo','ビョ'],['pya','ピャ'],['pyu','ピュ'],['pyo','ピョ'],['ja','ジャ'],['ju','ジュ'],['jo','ジョ'],
+    ['ka','カ'],['ki','キ'],['ku','ク'],['ke','ケ'],['ko','コ'],['sa','サ'],['si','シ'],['su','ス'],['se','セ'],['so','ソ'],
+    ['ta','タ'],['ti','チ'],['tu','ツ'],['te','テ'],['to','ト'],['na','ナ'],['ni','ニ'],['nu','ヌ'],['ne','ネ'],['no','ノ'],
+    ['ha','ハ'],['hi','ヒ'],['hu','フ'],['fu','フ'],['he','ヘ'],['ho','ホ'],['ma','マ'],['mi','ミ'],['mu','ム'],['me','メ'],['mo','モ'],
+    ['ya','ヤ'],['yu','ユ'],['yo','ヨ'],['ra','ラ'],['ri','リ'],['ru','ル'],['re','レ'],['ro','ロ'],['wa','ワ'],['wo','ヲ'],
+    ['ga','ガ'],['gi','ギ'],['gu','グ'],['ge','ゲ'],['go','ゴ'],['za','ザ'],['zi','ジ'],['ji','ジ'],['zu','ズ'],['ze','ゼ'],['zo','ゾ'],
+    ['da','ダ'],['di','ヂ'],['du','ヅ'],['de','デ'],['do','ド'],['ba','バ'],['bi','ビ'],['bu','ブ'],['be','ベ'],['bo','ボ'],
+    ['pa','パ'],['pi','ピ'],['pu','プ'],['pe','ペ'],['po','ポ'],['nn','ン'],
+    ['a','ア'],['i','イ'],['u','ウ'],['e','エ'],['o','オ'],['n','ン']];
+  // 促音（kk→ック等）
+  str=str.replace(/([bcdfghjklmpqrstvwxyz])\1/g,function(m,c){return 'ッ'+c;});
+  for(var i=0;i<table.length;i++){
+    str=str.split(table[i][0]).join(table[i][1]);
+  }
+  return str;
 }
 function matchSearch(name, query){
   if(!query)return true;
   var n=normalizeStr(name), q=normalizeStr(query);
+  // ローマ字の場合はカナに変換して検索
+  if(/^[a-z]+$/.test(q)){
+    var kq=normalizeStr(romajiToKana(query));
+    return n.indexOf(kq)>=0;
+  }
   return n.indexOf(q)>=0;
 }
 function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
