@@ -905,7 +905,7 @@ function renderCompanyStock(){
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
   var h='<div class="modal-title">🏢 会社在庫</div><div class="modal-sub">全工具の会社残数と持出し先現場</div>';
-  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_csSearch)+'" oninput="_csSearch=this.value;renderCompanyStock();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-cs" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_csSearch)+'" oninput="searchInput(\'srch-cs\',\'_csSearch\',renderCompanyStock)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1353,7 +1353,7 @@ function renderSiteToolPicker(stools){
   var disp=window._seKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(window._seKana)>=0;}):TM;
   if(window._seSearch)disp=disp.filter(function(t){return matchSearch(t.name,window._seSearch);});
   var h='<div style="margin-bottom:4px"><label class="lbl" style="margin-bottom:6px">使用する工具</label>';
-  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(window._seSearch||'')+'" oninput="window._seSearch=this.value;reRenderSitePicker();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-se" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(window._seSearch||'')+'" oninput="searchInput(\'srch-se\',\'_seSearch\',reRenderSitePicker)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1620,14 +1620,22 @@ function romajiToKana(s){
   return str;
 }
 function matchSearch(name, query){
-  if(!query)return true;
+  if(!query||query.length<2)return true;
   var n=normalizeStr(name), q=normalizeStr(query);
   // ローマ字の場合はカナに変換して検索
   if(/^[a-z]+$/.test(q)){
     var kq=normalizeStr(romajiToKana(query));
+    if(kq===q)return true; // 変換できなかった場合はスキップ
     return n.indexOf(kq)>=0;
   }
   return n.indexOf(q)>=0;
+}
+function searchInput(id,varName,renderFn){
+  var el=document.getElementById(id);if(!el)return;
+  var pos=el.selectionStart;
+  if(varName.indexOf('.')<0){window[varName]=el.value;}else{window[varName.split('.')[1]]=el.value;}
+  renderFn();
+  setTimeout(function(){var e=document.getElementById(id);if(e){e.focus();try{e.setSelectionRange(pos,pos);}catch(x){}}},0);
 }
 function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
 function renderTMModal(){
@@ -1637,7 +1645,7 @@ function renderTMModal(){
   var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
   if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
   var h='<div class="modal-title">🔧 工具管理（全体）</div><div class="modal-sub">全体の工具・写真・総数を管理します</div>';
-  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_tmSearch)+'" oninput="_tmSearch=this.value;renderTMModal();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-tm" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_tmSearch)+'" oninput="searchInput(\'srch-tm\',\'_tmSearch\',renderTMModal)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -1769,7 +1777,7 @@ function renderAddFromMaster(){
   var existSet={};
   items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
   var h='<div class="modal-title">工具を追加</div><div class="modal-sub">この現場の工具表から選んで追加します</div>';
-  h+='<input type="text" placeholder="🔍 工具名で検索..." value="'+esc(_addSearch)+'" oninput="_addSearch=this.value;renderAddFromMaster();" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
+  h+='<input id="srch-add" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_addSearch)+'" oninput="searchInput(\'srch-add\',\'_addSearch\',renderAddFromMaster)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   if(!siteTM.length){
     h+='<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">この現場の工具表が未設定です<br>管理者に工具表の設定を依頼してください</div>';
     h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">閉じる</button></div>';
