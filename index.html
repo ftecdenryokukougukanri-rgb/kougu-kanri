@@ -339,9 +339,10 @@ function getHolders(iid){
   var net={}, lastOutTs={};
   hist.filter(function(h){return h.iid===iid;}).sort(function(a,b){return a.ts-b.ts;}).forEach(function(h){
     if(!net[h.user])net[h.user]=0;
-    net[h.user]+=(h.type==='out'?h.amt:-h.amt);
+    var isOut=(h.type==='out'||h.type==='set_in');
+    net[h.user]+=(isOut?h.amt:-h.amt);
     if(net[h.user]<0)net[h.user]=0;
-    if(h.type==='out')lastOutTs[h.user]=h.ts;
+    if(isOut)lastOutTs[h.user]=h.ts;
   });
   return Object.keys(net).filter(function(u){return net[u]>0;}).map(function(u){
     return {user:u,amt:net[u],ts:lastOutTs[u]||0,type:'out'};
@@ -1421,11 +1422,12 @@ function saveSiteEdit(el){
     var tm=findTM(e.id); if(!tm)return;
     var existing=items.find(function(x){return x.site===siteId&&x.ref===e.id;});
     var beforeQty=existing?(existing.qty||0):0;
-    if(existing){existing.total=tm.total;existing.unit=tm.unit;existing.cat=tm.cat||existing.cat;existing.qty=e.qty;}
-    else{items.push({id:mkId(),name:tm.name,cat:tm.cat||'工具',site:siteId,unit:tm.unit,total:tm.total,qty:e.qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});}
+    var itemId;
+    if(existing){existing.total=tm.total;existing.unit=tm.unit;existing.cat=tm.cat||existing.cat;existing.qty=e.qty;itemId=existing.id;}
+    else{itemId=mkId();items.push({id:itemId,name:tm.name,cat:tm.cat||'工具',site:siteId,unit:tm.unit,total:tm.total,qty:e.qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});}
     var diff=e.qty-beforeQty;
     if(diff!==0){
-      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:(existing?existing.id:''),name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'現場工具表の設定変更（'+siteName+'）',after:e.qty});
+      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:itemId,name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'現場工具表の設定変更（'+siteName+'）',after:e.qty});
     }
   });
   closeModal(); toast('現場情報を更新しました'); if(curSiteId)renderContent();
