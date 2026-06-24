@@ -641,11 +641,12 @@ function execTransfer(){
   var targetId;
   if(target){
     target.qty+=_trQty;
+    target.checked=1;
     targetId=target.id;
   } else {
     targetId=mkId();
     var tm=refId?findTM(refId):null;
-    items.push({id:targetId,name:item.name,cat:item.cat,site:toSite,unit:item.unit,total:tm?tm.total:item.total,qty:_trQty,mach:item.mach,note:'',photo:item.photo,ref:refId});
+    items.push({id:targetId,name:item.name,cat:item.cat,site:toSite,unit:item.unit,total:tm?tm.total:item.total,qty:_trQty,mach:item.mach,note:'',photo:item.photo,ref:refId,checked:1});
     // sites.toolsにも追加
     var s=findSite(toSite);
     if(s&&refId){
