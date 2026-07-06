@@ -934,11 +934,6 @@ function renderCompanyStock(){
     }
   }
   h+='<div id="cs-results"><div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
-  function calcInCompany(tm){
-    var atSites=items.filter(function(x){return x.ref===tm.id;}).reduce(function(s,x){return s+(x.qty||0);},0);
-    var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
-    return Math.max(0,tm.total-atSites-inRep);
-  }
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
@@ -974,11 +969,6 @@ function updateCSResults(){
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
   var h='<div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
-  function calcInCompany(tm){
-    var atSites=items.filter(function(x){return x.ref===tm.id;}).reduce(function(s,x){return s+(x.qty||0);},0);
-    var inRep=repairs.filter(function(r){return r.tmId===tm.id;}).reduce(function(s,r){return s+(r.qty||1);},0);
-    return Math.max(0,tm.total-atSites-inRep);
-  }
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
