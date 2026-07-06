@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具管理アプリ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;color:#1e293b;background:#fff;-webkit-font-smoothing:antialiased}
+.hero{background:linear-gradient(135deg,#0f4c81 0%,#1a6fb5 50%,#2196c4 100%);color:#fff;padding:60px 24px 48px;text-align:center;position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:40px;background:#fff;border-radius:50% 50% 0 0 / 100% 100% 0 0}
+.hero-icon{font-size:48px;margin-bottom:12px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.15))}
+.hero h1{font-size:26px;font-weight:900;letter-spacing:.02em;margin-bottom:8px;line-height:1.3}
+.hero p{font-size:14px;opacity:.85;line-height:1.6;max-width:320px;margin:0 auto}
+.section{padding:40px 24px}
+.section-label{font-size:11px;font-weight:700;letter-spacing:.08em;color:#0f4c81;margin-bottom:8px;text-transform:uppercase}
+.section h2{font-size:20px;font-weight:700;margin-bottom:20px;line-height:1.4}
+.flow-step{display:flex;gap:16px;margin-bottom:24px;align-items:flex-start}
+.step-num{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
+.step-num.s1{background:#0f4c81}
+.step-num.s2{background:#0e7a5e}
+.step-num.s3{background:#b45309}
+.step-body h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.step-body p{font-size:13px;color:#64748b;line-height:1.6}
+.flow-arrow{margin-left:19px;width:2px;height:20px;background:#e2e8f0;margin-bottom:4px;border-radius:1px}
+.note-box{background:#f0f7ff;border-left:3px solid #0f4c81;padding:14px 16px;border-radius:0 10px 10px 0;margin-top:8px;font-size:13px;color:#334155;line-height:1.6}
+.features{background:#f8fafc;padding:40px 24px;border-top:1px solid #f1f5f9}
+.features h2{font-size:20px;font-weight:700;margin-bottom:24px;text-align:center}
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.feat-card{background:#fff;border-radius:14px;padding:20px 16px;text-align:center;border:1px solid #e8ecf1;transition:box-shadow .2s}
+.feat-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.feat-emoji{font-size:28px;margin-bottom:8px}
+.feat-card h3{font-size:13px;font-weight:700;margin-bottom:4px;color:#1e293b}
+.feat-card p{font-size:11px;color:#64748b;line-height:1.5}
+.cta{text-align:center;padding:48px 24px 40px;background:#fff}
+.cta h2{font-size:18px;font-weight:700;margin-bottom:8px}
+.cta p{font-size:13px;color:#64748b;margin-bottom:24px}
+.cta-btn{display:inline-block;background:linear-gradient(135deg,#0f4c81,#1a7fb5);color:#fff;text-decoration:none;padding:16px 48px;border-radius:60px;font-size:16px;font-weight:700;letter-spacing:.03em;box-shadow:0 4px 16px rgba(15,76,129,.3);transition:transform .15s,box-shadow .15s}
+.cta-btn:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(15,76,129,.35)}
+.cta-url{font-size:11px;color:#94a3b8;margin-top:16px;word-break:break-all}
+.footer{text-align:center;padding:24px;background:#f8fafc;border-top:1px solid #f1f5f9}
+.footer p{font-size:11px;color:#94a3b8}
+@media(min-width:480px){.hero h1{font-size:30px}.feat-grid{grid-template-columns:1fr 1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-icon">🔧</div>
+  <h1>工具管理アプリ</h1>
+  <p>工具の持出し・返却をスマホで簡単に。<br>現場ごとの在庫がひと目でわかります。</p>
+</div>
+
+<div class="section">
+  <div class="section-label">基本の流れ</div>
+  <h2>3ステップで工具管理</h2>
+
+  <div class="flow-step">
+    <div class="step-num s1">1</div>
+    <div class="step-body">
+      <h3>現場を作成し、班長を設定</h3>
+      <p>責任者が管理者画面から現場名・班長を登録します。</p>
+    </div>
+  </div>
+  <div class="flow-arrow"></div>
+  <div class="flow-step">
+    <div class="step-num s2">2</div>
+    <div class="step-body">
+      <h3>工具表を作成（工具を選択）</h3>
+      <p>使う工具を選んで現場の工具表を作ります。</p>
+    </div>
+  </div>
+  <div class="flow-arrow"></div>
+  <div class="flow-step">
+    <div class="step-num s3">3</div>
+    <div class="step-body">
+      <h3>工具表をもとに持出し・返却</h3>
+      <p>班長・作業員が現場画面から工具を持出し、作業後に返却します。</p>
+    </div>
+  </div>
+
+  <div class="note-box">
+    💡 工具表がまだできていない場合は、現場名と班長だけ先に登録し、後から工具表を作ることもできます。
+  </div>
+</div>
+
+<div class="features">
+  <h2>主な機能</h2>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-emoji">📤</div>
+      <h3>持出し・返却</h3>
+      <p>誰が何を持ち出したか記録。返却もワンタップ。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-emoji">✅</div>
+      <h3>準備チェック</h3>
+      <p>工具の準備状況をチェックリストで管理。進捗が一目でわかります。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-emoji">🔄</div>
+      <h3>他現場へ移動</h3>
+      <p>現場間で工具を移動。移動先にも履歴が残ります。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-emoji">🏢</div>
+      <h3>会社在庫</h3>
+      <p>全工具の会社残数と持出し先を一覧で確認できます。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-emoji">🔧</div>
+      <h3>修理登録</h3>
+      <p>壊れた工具を写真付きで登録。修理状況を共有できます。</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-emoji">🔍</div>
+      <h3>工具検索</h3>
+      <p>名前で工具をすぐに検索。五十音フィルタも使えます。</p>
+    </div>
+  </div>
+</div>
+
+<div class="cta">
+  <h2>まずは触ってみてください</h2>
+  <p>自分の名前を選んでログインするだけで使えます。<br>気づいたことがあれば教えてください。</p>
+  <a href="https://ftecdenryokukougukanri-rgb.github.io/kougu-kanri/" class="cta-btn">アプリを開く</a>
+  <div class="cta-url">https://ftecdenryokukougukanri-rgb.github.io/kougu-kanri/</div>
+</div>
+
+<div class="footer">
+  <p>© 2026 工具管理アプリ</p>
+</div>
+
+</body>
+</html>
