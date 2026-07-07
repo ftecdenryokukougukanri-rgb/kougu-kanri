@@ -2313,86 +2313,14 @@ function reconcileDeletedItems(serverData){
 
 // ============================================================
 // 全データ保存（操作後に呼ぶ）
-// saveAll前に最新データをfetchし、他ユーザーの変更をマージしてから保存する
+// シンプルにローカルデータをそのままPOST（マージは自動リロードに任せる）
 // ============================================================
 function saveAll(cb, silent){
   if(!GAS_LOADED) { if(cb)cb(); return; }
   if(_saveInProgress){ if(cb)cb(); return; } // 二重実行防止
   _saveInProgress=true;
   if(!silent)showLoading('保存中...');
-
-  // ① まず最新データを取得してマージ
-  gasGet({action:'getAll'},function(fetchErr,serverData){
-    if(!fetchErr&&serverData&&!serverData.error){
-      mergeServerData(serverData);
-    }
-    // ② マージ後のデータを保存
-    doSaveAll(function(err){
-      _saveInProgress=false;
-      if(!silent)hideLoading();
-      if(err&&!silent) toast('⚠ 保存に失敗しました（通信エラー）');
-      if(cb)cb();
-    });
-  });
-}
-
-// サーバーデータとローカルデータをマージ
-function mergeServerData(serverData){
-  // --- items: サーバーにあってローカルにないアイテム（他ユーザーが追加）を取り込む ---
-  // ただしローカルで意図的に削除したアイテムは復活させない
-  if(Array.isArray(serverData.items)){
-    var localIdSet={};
-    items.forEach(function(x){localIdSet[x.id]=true;});
-    var deletedSet={};
-    _deletedItemIds.forEach(function(id){deletedSet[id]=true;});
-    serverData.items.forEach(function(si){
-      if(!localIdSet[si.id]&&!deletedSet[si.id]){
-        items.push(si); // 他ユーザーが追加したアイテム
-      }
-    });
-  }
-
-  // --- hist: タイムスタンプベースで重複排除して結合 ---
-  if(Array.isArray(serverData.hist)){
-    var localHistKeys={};
-    hist.forEach(function(h){
-      localHistKeys[h.ts+'_'+h.iid+'_'+h.user]=true;
-    });
-    serverData.hist.forEach(function(sh){
-      var key=sh.ts+'_'+sh.iid+'_'+sh.user;
-      if(!localHistKeys[key]){
-        hist.push(sh); // 他ユーザーの履歴を追加
-      }
-    });
-  }
-
-  // --- repairs: IDベースで重複排除して結合 ---
-  if(Array.isArray(serverData.repairs)){
-    var localRepIds={};
-    repairs.forEach(function(r){localRepIds[r.id]=true;});
-    serverData.repairs.forEach(function(sr){
-      if(!localRepIds[sr.id]){
-        repairs.push(sr); // 他ユーザーが追加した修理情報
-      }
-    });
-  }
-
-  // --- sites.tools: サーバーにあってローカルにない現場の工具割当を取り込む ---
-  if(Array.isArray(serverData.sites)){
-    serverData.sites.forEach(function(ss){
-      var localSite=findSite(ss.id);
-      if(!localSite){
-        // 他ユーザーが追加した現場
-        ss.leaders=Array.isArray(ss.leaders)?ss.leaders:['','',''];
-        ss.tools=Array.isArray(ss.tools)?ss.tools:[];
-        sites.push(ss);
-      }
-    });
-  }
-}
-
-// 実際のPOST送信（gasPostJsonでレスポンス確認可能に）
-function doSaveAll(cb){
+  // 写真(base64)はスプレッドシートに保存しない（URLのみ保存）
   var payload={
     action:'saveAll',
     data:{
@@ -2410,17 +2338,21 @@ function doSaveAll(cb){
       console.warn('保存失敗（1回目）、リトライ...',err,res);
       // 1回だけリトライ
       gasPostJson(payload, function(err2, res2){
+        _saveInProgress=false;
+        if(!silent)hideLoading();
         if(err2||!res2||res2.status!=='ok'){
           console.warn('保存失敗（リトライ）',err2,res2);
-          cb(err2||new Error('save failed after retry'));
+          if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
         } else {
           _deletedItemIds=[];
-          cb(null);
         }
+        if(cb)cb();
       });
     } else {
+      _saveInProgress=false;
+      if(!silent)hideLoading();
       _deletedItemIds=[];
-      cb(null);
+      if(cb)cb();
     }
   });
 }
