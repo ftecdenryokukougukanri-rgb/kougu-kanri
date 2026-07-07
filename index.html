@@ -1081,9 +1081,12 @@ function execAdjust(){
   window._adjNote=''; closeModal();
   toast((pendType==='out'?'📤':'📥')+' '+ds+' '+ts+' '+curUser+'が'+item.name+' '+amt+item.unit+(pendType==='out'?'を持出し':'を返却'));
   renderContent();
-  // 削除が発生した場合は差分送信（即時）＋裏でsaveAll（行削除）、通常は差分送信のみ
-  gasAdjust(hEntry, item.qty, null);
-  if(itemRemoved){saveAll(null, true);}
+  // 削除が発生した場合はsaveAllのみ（gasAdjustとの競合を防ぐ）。通常は差分送信のみ
+  if(itemRemoved){
+    saveAll(null, true);
+  } else {
+    gasAdjust(hEntry, item.qty, null);
+  }
 }
 
 // ============================================================
@@ -2388,9 +2391,9 @@ function mergeServerData(serverData){
   }
 }
 
-// 実際のPOST送信
+// 実際のPOST送信（gasPostJsonでレスポンス確認可能に）
 function doSaveAll(cb){
-  gasPost({
+  var payload={
     action:'saveAll',
     data:{
       cfg:cfg,
@@ -2401,12 +2404,22 @@ function doSaveAll(cb){
       hist:hist,
       repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
     }
-  },function(err,res){
+  };
+  gasPostJson(payload, function(err, res){
     if(err||!res||res.status!=='ok'){
-      console.warn('保存失敗',err,res);
-      cb(err||new Error('save failed'));
+      console.warn('保存失敗（1回目）、リトライ...',err,res);
+      // 1回だけリトライ
+      gasPostJson(payload, function(err2, res2){
+        if(err2||!res2||res2.status!=='ok'){
+          console.warn('保存失敗（リトライ）',err2,res2);
+          cb(err2||new Error('save failed after retry'));
+        } else {
+          _deletedItemIds=[];
+          cb(null);
+        }
+      });
     } else {
-      // _deletedItemIdsはsilentReload時にサーバー反映を確認してからクリアする
+      _deletedItemIds=[];
       cb(null);
     }
   });
