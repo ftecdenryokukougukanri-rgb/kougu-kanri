@@ -328,6 +328,8 @@ var filterCat='all', pendType=null, pendId=null, editId=null, photoData='';
 var delType=null, delId=null, editMemIdx=-1;
 var qVal=1;
 var tmKana='', addKana='';
+var _autoReloadTimer=null, _saveInProgress=false, _lastActivity=Date.now();
+var AUTO_RELOAD_MS=60000; // 1分
 
 // ============================================================
 // ユーティリティ
@@ -2186,6 +2188,42 @@ function gasPostJson(body, cb){
 // ============================================================
 // 全データ読み込み（初回）
 // ============================================================
+// ============================================================
+// 共通データ適用（GASレスポンス → グローバル変数）
+// ============================================================
+function applyLoadedData(data){
+  if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
+  if(Array.isArray(data.members)){
+    members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
+  }
+  if(Array.isArray(data.sites)){
+    sites=data.sites.filter(function(s){return s&&typeof s.name==='string';}).map(function(s){
+      s.leaders=Array.isArray(s.leaders)?s.leaders:['','',''];
+      s.tools=Array.isArray(s.tools)?s.tools:[];
+      return s;
+    });
+  }
+  if(Array.isArray(data.TM)){
+    TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
+      t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
+      t.total=parseInt(t.total)||0;
+      return t;
+    });
+  }
+  if(data.items&&Array.isArray(data.items)) items=data.items;
+  if(data.hist&&Array.isArray(data.hist)) hist=data.hist;
+  if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs;
+  GAS_LOADED=true;
+}
+
+// 現在表示中の画面を再描画（画面遷移なし）
+function rerenderCurrentScreen(){
+  applyStyle();
+  if(curSiteId){renderSiteTabs();renderContent();}
+  else if(!document.getElementById('screen-site').classList.contains('hidden')){renderSiteScreen();}
+  else if(!document.getElementById('screen-admin').classList.contains('hidden')){updateCnts();}
+}
+
 function loadAll(){
   showLoading('データを読み込んでいます...');
   gasGet({action:'getAll'},function(err,data){
@@ -2198,32 +2236,10 @@ function loadAll(){
       if(err) toast('⚠ オフラインモード（データは保存されません）');
       return;
     }
-    // データを上書き（有効なデータのみ。空配列もGAS側の正しい状態として上書きする）
-    if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
-    // membersは name が文字列のものだけ使う
-    if(Array.isArray(data.members)){
-      members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
-    }
-    if(Array.isArray(data.sites)){
-      sites=data.sites.filter(function(s){return s&&typeof s.name==='string';}).map(function(s){
-        s.leaders=Array.isArray(s.leaders)?s.leaders:['','',''];
-        s.tools=Array.isArray(s.tools)?s.tools:[];
-        return s;
-      });
-    }
-    if(Array.isArray(data.TM)){
-      TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
-        t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
-        t.total=parseInt(t.total)||0;
-        return t;
-      });
-    }
-    if(data.items&&Array.isArray(data.items)) items=data.items;
-    if(data.hist&&Array.isArray(data.hist)) hist=data.hist;
-    if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs;
-    GAS_LOADED=true;
+    applyLoadedData(data);
     applyStyle();
     renderNameScreen();
+    startAutoReload(); // 自動リロード開始
     toast('✅ データを読み込みました');
   });
 }
@@ -2239,44 +2255,115 @@ function refreshData(){
       toast('⚠ 更新に失敗しました');
       return;
     }
-    if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
-    if(Array.isArray(data.members)){
-      members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
-    }
-    if(Array.isArray(data.sites)){
-      sites=data.sites.filter(function(s){return s&&typeof s.name==='string';}).map(function(s){
-        s.leaders=Array.isArray(s.leaders)?s.leaders:['','',''];
-        s.tools=Array.isArray(s.tools)?s.tools:[];
-        return s;
-      });
-    }
-    if(Array.isArray(data.TM)){
-      TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
-        t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
-        t.total=parseInt(t.total)||0;
-        return t;
-      });
-    }
-    if(data.items&&Array.isArray(data.items)) items=data.items;
-    if(data.hist&&Array.isArray(data.hist)) hist=data.hist;
-    if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs;
-    GAS_LOADED=true;
-    applyStyle();
-    // 現在の画面を再描画
-    if(curSiteId){renderSiteTabs();renderContent();}
-    else if(!document.getElementById('screen-site').classList.contains('hidden')){renderSiteScreen();}
-    else if(!document.getElementById('screen-admin').classList.contains('hidden')){updateCnts();}
+    applyLoadedData(data);
+    rerenderCurrentScreen();
     toast('✅ 最新データに更新しました');
   });
 }
 
 // ============================================================
+// 自動リロード（1分ごとにバックグラウンドで最新データ取得）
+// ============================================================
+function startAutoReload(){
+  if(_autoReloadTimer)clearInterval(_autoReloadTimer);
+  _autoReloadTimer=setInterval(silentReload, AUTO_RELOAD_MS);
+}
+
+function silentReload(){
+  if(!GAS_LOADED)return;
+  if(_saveInProgress)return;
+  if(_photoUploadPending)return;
+  // モーダルが開いている間はスキップ（操作中のデータが消えるのを防ぐ）
+  if(document.getElementById('modal-bg').classList.contains('show'))return;
+  // クロップオーバーレイが開いている間もスキップ
+  if(document.getElementById('crop-overlay'))return;
+
+  gasGet({action:'getAll'},function(err,data){
+    if(err||!data||data.error)return; // 失敗は無視
+    applyLoadedData(data);
+    rerenderCurrentScreen();
+  });
+}
+
+// ============================================================
 // 全データ保存（操作後に呼ぶ）
+// saveAll前に最新データをfetchし、他ユーザーの変更をマージしてから保存する
 // ============================================================
 function saveAll(cb, silent){
-  if(!GAS_LOADED) { if(cb)cb(); return; } // オフライン時はスキップ
+  if(!GAS_LOADED) { if(cb)cb(); return; }
+  if(_saveInProgress){ if(cb)cb(); return; } // 二重実行防止
+  _saveInProgress=true;
   if(!silent)showLoading('保存中...');
-  // 写真(base64)はスプレッドシートに保存しない（URLのみ保存）
+
+  // ① まず最新データを取得してマージ
+  gasGet({action:'getAll'},function(fetchErr,serverData){
+    if(!fetchErr&&serverData&&!serverData.error){
+      mergeServerData(serverData);
+    }
+    // ② マージ後のデータを保存
+    doSaveAll(function(err){
+      _saveInProgress=false;
+      if(!silent)hideLoading();
+      if(err&&!silent) toast('⚠ 保存に失敗しました（通信エラー）');
+      if(cb)cb();
+    });
+  });
+}
+
+// サーバーデータとローカルデータをマージ
+function mergeServerData(serverData){
+  // --- items: サーバーにあってローカルにないアイテム（他ユーザーが追加）を取り込む ---
+  if(Array.isArray(serverData.items)){
+    var localIdSet={};
+    items.forEach(function(x){localIdSet[x.id]=true;});
+    serverData.items.forEach(function(si){
+      if(!localIdSet[si.id]){
+        items.push(si); // 他ユーザーが追加したアイテム
+      }
+    });
+  }
+
+  // --- hist: タイムスタンプベースで重複排除して結合 ---
+  if(Array.isArray(serverData.hist)){
+    var localHistKeys={};
+    hist.forEach(function(h){
+      localHistKeys[h.ts+'_'+h.iid+'_'+h.user]=true;
+    });
+    serverData.hist.forEach(function(sh){
+      var key=sh.ts+'_'+sh.iid+'_'+sh.user;
+      if(!localHistKeys[key]){
+        hist.push(sh); // 他ユーザーの履歴を追加
+      }
+    });
+  }
+
+  // --- repairs: IDベースで重複排除して結合 ---
+  if(Array.isArray(serverData.repairs)){
+    var localRepIds={};
+    repairs.forEach(function(r){localRepIds[r.id]=true;});
+    serverData.repairs.forEach(function(sr){
+      if(!localRepIds[sr.id]){
+        repairs.push(sr); // 他ユーザーが追加した修理情報
+      }
+    });
+  }
+
+  // --- sites.tools: サーバーにあってローカルにない現場の工具割当を取り込む ---
+  if(Array.isArray(serverData.sites)){
+    serverData.sites.forEach(function(ss){
+      var localSite=findSite(ss.id);
+      if(!localSite){
+        // 他ユーザーが追加した現場
+        ss.leaders=Array.isArray(ss.leaders)?ss.leaders:['','',''];
+        ss.tools=Array.isArray(ss.tools)?ss.tools:[];
+        sites.push(ss);
+      }
+    });
+  }
+}
+
+// 実際のPOST送信
+function doSaveAll(cb){
   gasPost({
     action:'saveAll',
     data:{
@@ -2289,12 +2376,12 @@ function saveAll(cb, silent){
       repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
     }
   },function(err,res){
-    if(!silent)hideLoading();
     if(err||!res||res.status!=='ok'){
       console.warn('保存失敗',err,res);
-      if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
+      cb(err||new Error('save failed'));
+    } else {
+      cb(null);
     }
-    if(cb)cb();
   });
 }
 
