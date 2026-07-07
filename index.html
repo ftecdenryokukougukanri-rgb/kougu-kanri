@@ -1486,10 +1486,11 @@ function collectSeTools(){
 function reRenderSitePicker(){
   var cur=collectSeTools(); // [{id,qty}] currently visible & checked
   var s=sites[window._seIdx]; var stored=s?s.tools||[]:[];
-  // build merged map: start from stored, overlay cur, remove unchecked
+  // _seMergedToolsがあれば前回の切替で保存した状態をベースにする（チェック状態を保持）
+  var base=window._seMergedTools||stored;
   var map={};
-  stored.forEach(function(e){if(e&&e.id)map[e.id]=e.qty||0;});
-  // apply unchecked removals
+  base.forEach(function(e){if(e&&e.id)map[e.id]=e.qty||0;});
+  // apply unchecked removals (現在DOMに表示されているもののみ)
   document.querySelectorAll('.se-tool-chk:not(:checked)').forEach(function(c){delete map[c.value];});
   // apply current checks
   cur.forEach(function(e){map[e.id]=e.qty;});
