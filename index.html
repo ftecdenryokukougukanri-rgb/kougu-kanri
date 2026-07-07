@@ -2261,6 +2261,7 @@ function refreshData(){
       return;
     }
     applyLoadedData(data);
+    reconcileDeletedItems(data);
     rerenderCurrentScreen();
     toast('✅ 最新データに更新しました');
   });
@@ -2286,8 +2287,25 @@ function silentReload(){
   gasGet({action:'getAll'},function(err,data){
     if(err||!data||data.error)return; // 失敗は無視
     applyLoadedData(data);
+    reconcileDeletedItems(data);
     rerenderCurrentScreen();
   });
+}
+
+// ローカル削除したアイテムがリロードで復活しないよう除外し、
+// サーバーから消えたことが確認できたら追跡リストからも除去する
+function reconcileDeletedItems(serverData){
+  if(!_deletedItemIds.length)return;
+  var deletedSet={};
+  _deletedItemIds.forEach(function(id){deletedSet[id]=true;});
+  // サーバーデータで上書きされた items から削除済みアイテムを除外
+  items=items.filter(function(x){return !deletedSet[x.id];});
+  // サーバー上でも消えていたら追跡不要 → _deletedItemIds から除去
+  var serverIdSet={};
+  if(Array.isArray(serverData.items)){
+    serverData.items.forEach(function(x){serverIdSet[x.id]=true;});
+  }
+  _deletedItemIds=_deletedItemIds.filter(function(id){return serverIdSet[id];});
 }
 
 // ============================================================
@@ -2388,7 +2406,7 @@ function doSaveAll(cb){
       console.warn('保存失敗',err,res);
       cb(err||new Error('save failed'));
     } else {
-      _deletedItemIds=[]; // 保存成功→削除追跡リストクリア
+      // _deletedItemIdsはsilentReload時にサーバー反映を確認してからクリアする
       cb(null);
     }
   });
