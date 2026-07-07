@@ -330,6 +330,7 @@ var qVal=1;
 var tmKana='', addKana='';
 var _autoReloadTimer=null, _saveInProgress=false, _lastActivity=Date.now();
 var AUTO_RELOAD_MS=60000; // 1分
+var _deletedItemIds=[]; // ローカルで意図的に削除したアイテムID（マージ時の復活防止）
 
 // ============================================================
 // ユーティリティ
@@ -649,6 +650,7 @@ function execTransfer(){
   // 移動元が0になったら現場から削除
   var srcRemoved=item.qty<=0;
   if(srcRemoved){
+    _deletedItemIds.push(item.id); // マージ復活防止
     var si=items.indexOf(item);
     if(si>=0)items.splice(si,1);
     var srcSite=findSite(item.site);
@@ -1064,6 +1066,7 @@ function execAdjust(){
   }
   var itemRemoved=(pendType==='in'&&item.qty<=0);
   if(itemRemoved){
+    _deletedItemIds.push(item.id); // マージ復活防止
     var idx=items.indexOf(item);
     if(idx>=0)items.splice(idx,1);
     var s=findSite(item.site);
@@ -1180,7 +1183,7 @@ function saveItem(){
       }
     });
     Object.keys(sibMap).forEach(function(sid){
-      if(!checkedSiteIds[sid]){items=items.filter(function(x){return x.id!==sibMap[sid].id;});}
+      if(!checkedSiteIds[sid]){_deletedItemIds.push(sibMap[sid].id);items=items.filter(function(x){return x.id!==sibMap[sid].id;});}
     });
     toast('更新しました');
   } else {
@@ -1227,9 +1230,9 @@ function confirmDel2(){
 }
 function cancelDel(){delType=null;delId=null;closeModal();}
 function execDel(){
-  if(delType==='item'){items=items.filter(function(x){return x.id!==delId;});editId=null;toast('品目を削除しました');closeModal();renderContent();saveAll(null);}
+  if(delType==='item'){_deletedItemIds.push(delId);items=items.filter(function(x){return x.id!==delId;});editId=null;toast('品目を削除しました');closeModal();renderContent();saveAll(null);}
   else if(delType==='member'){var nm=members.find(function(x){return x.id===delId;});var n=nm?nm.name:'';members=members.filter(function(x){return x.id!==delId;});if(n)sites.forEach(function(s){if(s.chief===n)s.chief='';s.leaders=s.leaders.map(function(l){return l===n?'':l;});});toast('メンバーを削除しました');openMembersModal();saveAll(null);}
-  else if(delType==='site'){var sid=delId;items=items.filter(function(x){return x.site!==sid;});sites=sites.filter(function(x){return x.id!==sid;});if(curSiteId===sid&&sites.length>0){curSiteId=sites[0].id;siteIdx=0;}toast('現場を削除しました');openSitesModal();saveAll(null);}
+  else if(delType==='site'){var sid=delId;items.filter(function(x){return x.site===sid;}).forEach(function(x){_deletedItemIds.push(x.id);});items=items.filter(function(x){return x.site!==sid;});sites=sites.filter(function(x){return x.id!==sid;});if(curSiteId===sid&&sites.length>0){curSiteId=sites[0].id;siteIdx=0;}toast('現場を削除しました');openSitesModal();saveAll(null);}
   else if(delType==='tm'){TM.splice(TM.findIndex(function(x){return x.id===delId;}),1);toast('削除しました');openToolMasterModal();saveAll(null);}
   delType=null;delId=null;
 }
@@ -1532,6 +1535,8 @@ function saveSiteEdit(el){
   // apply to items: add missing, remove unchecked, update existing qty
   var toolIds=finalTools.map(function(e){return e.id;});
   // remove items no longer in tools list
+  // 削除されるアイテムを記録してからフィルタ
+  items.filter(function(x){return x.site===siteId&&x.ref&&toolIds.indexOf(x.ref)<0;}).forEach(function(x){_deletedItemIds.push(x.id);});
   items=items.filter(function(x){return x.site!==siteId||!x.ref||toolIds.indexOf(x.ref)>=0;});
   // add/update items for each tool（数量変更があれば操作履歴に記録）
   var siteName=sites[idx].name;
@@ -2313,11 +2318,14 @@ function saveAll(cb, silent){
 // サーバーデータとローカルデータをマージ
 function mergeServerData(serverData){
   // --- items: サーバーにあってローカルにないアイテム（他ユーザーが追加）を取り込む ---
+  // ただしローカルで意図的に削除したアイテムは復活させない
   if(Array.isArray(serverData.items)){
     var localIdSet={};
     items.forEach(function(x){localIdSet[x.id]=true;});
+    var deletedSet={};
+    _deletedItemIds.forEach(function(id){deletedSet[id]=true;});
     serverData.items.forEach(function(si){
-      if(!localIdSet[si.id]){
+      if(!localIdSet[si.id]&&!deletedSet[si.id]){
         items.push(si); // 他ユーザーが追加したアイテム
       }
     });
@@ -2380,6 +2388,7 @@ function doSaveAll(cb){
       console.warn('保存失敗',err,res);
       cb(err||new Error('save failed'));
     } else {
+      _deletedItemIds=[]; // 保存成功→削除追跡リストクリア
       cb(null);
     }
   });
