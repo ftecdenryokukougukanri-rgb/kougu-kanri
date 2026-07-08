@@ -331,6 +331,10 @@ var tmKana='', addKana='';
 var _autoReloadTimer=null, _saveInProgress=false, _lastActivity=Date.now();
 var AUTO_RELOAD_MS=60000; // 1分
 var _deletedItemIds=[]; // ローカルで意図的に削除したアイテムID（マージ時の復活防止）
+var _checkPending=false; // 準備チェックの保存待ち中フラグ（自動リロードブロック用）
+var _touchedSites=[]; // 今回変更した現場ID（GASマージ保存の対象範囲）
+var _deletedRepairIds=[]; // 今回削除した修理ID
+function markSiteTouched(siteId){ if(siteId&&_touchedSites.indexOf(siteId)<0)_touchedSites.push(siteId); }
 
 // ============================================================
 // ユーティリティ
@@ -536,10 +540,13 @@ var _checkSaveTimer=null;
 function toggleCheck(iid){
   var item=findItem(iid);if(!item)return;
   item.checked=item.checked?0:1;
+  markSiteTouched(item.site);
   renderContent();
   // デバウンス：連続タップ時は最後の操作から800ms後にまとめて保存
+  // 保存待ちの間は自動リロードをブロック（未保存の✓が上書きで消えるのを防ぐ）
+  _checkPending=true;
   if(_checkSaveTimer)clearTimeout(_checkSaveTimer);
-  _checkSaveTimer=setTimeout(function(){saveAll(null,true);},800);
+  _checkSaveTimer=setTimeout(function(){saveAll(function(){_checkPending=false;},true);},800);
 }
 function filterCheck(f){checkFilter=f;renderContent();}
 function openAddToolForSite(){
@@ -645,6 +652,8 @@ function execTransfer(){
   var nEl=document.getElementById('tr-note');if(nEl)_trNote=nEl.value.trim();
   if(_trQty<=0){toast('数量を入力してください');return;}
   if(_trQty>item.qty){toast('現場に在庫が足りません（残'+item.qty+item.unit+'）');return;}
+  markSiteTouched(item.site); // 移動元
+  markSiteTouched(toSite);    // 移動先
   // 移動元から減らす
   item.qty-=_trQty;
   // 移動元が0になったら現場から削除
@@ -731,9 +740,11 @@ function completeRepairFromBtn(el){
   showModal(h);
 }
 function doCompleteRepair(rid){
+  _deletedRepairIds.push(rid); // マージ保存で削除を反映
   repairs=repairs.filter(function(r){return r.id!==rid;});
   toast('✅ 修理完了として削除しました');
   openRepairModal();
+  saveAll(null);
 }
 function openRepairEdit(rid){
   _repairEditId=rid;
@@ -841,9 +852,11 @@ function deleteRepairConfirm(rid,name){
   showModal(h);
 }
 function doDeleteRepair(rid){
+  _deletedRepairIds.push(rid); // マージ保存で削除を反映
   repairs=repairs.filter(function(r){return r.id!==rid;});
   toast('修理記録を削除しました');
   openRepairModal();
+  saveAll(null);
 }
 function repQtyAdj(d){
   var el=document.getElementById('rep-qty');if(!el)return;
@@ -1171,12 +1184,12 @@ function saveItem(){
   var chks=document.querySelectorAll('.im-site-chk:checked');
   if(!chks.length){toast('現場を1つ以上選択してください');return;}
   var checkedSiteIds={};
-  chks.forEach(function(c){checkedSiteIds[c.value]=true;});
+  chks.forEach(function(c){checkedSiteIds[c.value]=true;markSiteTouched(c.value);});
   if(editId){
     var item=findItem(editId);
     var siblings=items.filter(function(x){return x.name===item.name&&x.cat===item.cat;});
     var sibMap={};
-    siblings.forEach(function(x){sibMap[x.site]=x;});
+    siblings.forEach(function(x){sibMap[x.site]=x;markSiteTouched(x.site);});
     Object.keys(checkedSiteIds).forEach(function(sid){
       if(sibMap[sid]){
         var idx=items.findIndex(function(x){return x.id===sibMap[sid].id;});
@@ -1504,6 +1517,7 @@ function reRenderSitePicker(){
 }
 function saveSiteEdit(el){
   var idx=parseInt(el.dataset.idx);
+  markSiteTouched(sites[idx].id); // 編集した現場
   if(isAdmin){
     var ce=document.getElementById('se-chief');if(ce)sites[idx].chief=ce.value;
     var l0=document.getElementById('se-l0'),l1=document.getElementById('se-l1'),l2=document.getElementById('se-l2');
@@ -1805,7 +1819,7 @@ function saveTMEdit(el){
   t.name=name; t.cat=newCat; t.yomis=yomisArr; t.yomi=yomisArr[0]; t.unit=document.getElementById('tme-unit').value||'個'; t.total=parseInt(document.getElementById('tme-total').value)||0; t.photo=newPhoto;
   items.forEach(function(x){if(x.ref===id){x.name=name;x.cat=newCat;x.photo=newPhoto;}});
   toast('更新しました'); window._tmePhotoData=''; renderTMModal();
-  saveAll(null);
+  saveAll(null, false, true); // 全現場のitems名称を反映するため全上書き
 }
 function deleteTMFromBtn(el){var t=findTM(el.dataset.tmid);if(t)showDeleteConfirm('tm',el.dataset.tmid,t.name);}
 function openAddTM(){
@@ -2282,6 +2296,7 @@ function startAutoReload(){
 function silentReload(){
   if(!GAS_LOADED)return;
   if(_saveInProgress)return;
+  if(_checkPending)return; // 準備チェック保存待ち中はスキップ（未保存の✓を守る）
   if(_photoUploadPending)return;
   // モーダルが開いている間はスキップ（操作中のデータが消えるのを防ぐ）
   if(document.getElementById('modal-bg').classList.contains('show'))return;
@@ -2314,48 +2329,66 @@ function reconcileDeletedItems(serverData){
 
 // ============================================================
 // 全データ保存（操作後に呼ぶ）
-// シンプルにローカルデータをそのままPOST（マージは自動リロードに任せる）
+// GAS側でマージ保存できるよう、変更範囲（touchedSites）と削除IDも送る。
+// これにより他ユーザーが同時操作しても互いのデータを消さない。
 // ============================================================
-function saveAll(cb, silent){
+function saveAll(cb, silent, forceFull){
   if(!GAS_LOADED) { if(cb)cb(); return; }
   if(_saveInProgress){ if(cb)cb(); return; } // 二重実行防止
   _saveInProgress=true;
   if(!silent)showLoading('保存中...');
+  // このsaveAllで送る変更範囲・削除情報のスナップショット
+  var sentTouched=_touchedSites.slice();
+  var sentDelItems=_deletedItemIds.slice();
+  var sentDelRepairs=_deletedRepairIds.slice();
   // 写真(base64)はスプレッドシートに保存しない（URLのみ保存）
-  var payload={
-    action:'saveAll',
-    data:{
-      cfg:cfg,
-      members:members,
-      sites:sites,
-      TM:TM.map(function(t){var p=t.photo||'';return Object.assign({},t,{photo:p.indexOf('data:')===0?'':p});}),
-      items:items.map(function(x){var p=x.photo||'';return Object.assign({},x,{photo:p.indexOf('data:')===0?'':p});}),
-      hist:hist,
-      repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
-    }
+  var dataObj={
+    cfg:cfg,
+    members:members,
+    sites:sites,
+    TM:TM.map(function(t){var p=t.photo||'';return Object.assign({},t,{photo:p.indexOf('data:')===0?'':p});}),
+    items:items.map(function(x){var p=x.photo||'';return Object.assign({},x,{photo:p.indexOf('data:')===0?'':p});}),
+    hist:hist,
+    repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
   };
+  // forceFull=trueのマスタ操作（工具マスタ編集など）は従来の全上書き。
+  // それ以外はマージ用の変更範囲情報を付与する。
+  if(!forceFull){
+    dataObj.touchedSites=sentTouched;
+    dataObj.deletedItemIds=sentDelItems;
+    dataObj.deletedRepairIds=sentDelRepairs;
+    dataObj.mergeRepairs=true;
+  }
+  var payload={action:'saveAll',data:dataObj};
+  function onDone(ok){
+    _saveInProgress=false;
+    if(!silent)hideLoading();
+    if(ok){
+      // 送信できた分だけ追跡リストから除去（送信中に増えた分は次回に持ち越し）
+      _touchedSites=_touchedSites.filter(function(s){return sentTouched.indexOf(s)<0;});
+      _deletedItemIds=_deletedItemIds.filter(function(id){return sentDelItems.indexOf(id)<0;});
+      _deletedRepairIds=_deletedRepairIds.filter(function(id){return sentDelRepairs.indexOf(id)<0;});
+    }
+    if(cb)cb();
+  }
   gasPostJson(payload, function(err, res){
     if(err||!res||res.status!=='ok'){
       console.warn('保存失敗（1回目）、リトライ...',err,res);
       // 1回だけリトライ
       gasPostJson(payload, function(err2, res2){
-        _saveInProgress=false;
-        if(!silent)hideLoading();
         if(err2||!res2||res2.status!=='ok'){
           console.warn('保存失敗（リトライ）',err2,res2);
           if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
+          onDone(false);
         } else {
-          _deletedItemIds=[];
+          onDone(true);
         }
-        if(cb)cb();
       });
     } else {
-      _saveInProgress=false;
-      if(!silent)hideLoading();
-      _deletedItemIds=[];
-      if(cb)cb();
+      onDone(true);
     }
   });
+
 }
 
 // ============================================================
@@ -2363,6 +2396,7 @@ function saveAll(cb, silent){
 // ============================================================
 function gasAdjust(histEntry, itemAfterQty, cb){
   if(!GAS_LOADED){if(cb)cb();return;}
+  _saveInProgress=true; // 送信完了まで自動リロードをブロック（巻き戻り防止）
   gasPost({
     action:'adjust',
     hist:histEntry,
@@ -2370,12 +2404,15 @@ function gasAdjust(histEntry, itemAfterQty, cb){
     qty:itemAfterQty
   },function(err,res){
     if(err||!res||res.status!=='ok'){
-      // 失敗してもUX止めないが、saveAllでリカバリ
-      console.warn('adjust送信失敗、saveAllでリカバリ');
-      saveAll(cb);
+      // adjust失敗 → saveAll（全体保存）でリカバリ。silentでUXを止めない
+      console.warn('adjust送信失敗、saveAllでリカバリ',err,res);
+      _saveInProgress=false; // saveAll側で再度立て直す
+      saveAll(cb, true);
       return;
     }
-    if(cb)cb();
+    // no-corsの送信完了後、GASの書き込みが確実に終わるまで少し猶予を持たせてから
+    // フラグを解除する（直後の自動リロードで古いデータを取得して巻き戻るのを防ぐ）
+    setTimeout(function(){ _saveInProgress=false; if(cb)cb(); }, 1500);
   });
 }
 
