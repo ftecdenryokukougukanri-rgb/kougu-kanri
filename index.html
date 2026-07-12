@@ -334,7 +334,26 @@ var _deletedItemIds=[]; // ローカルで意図的に削除したアイテムID
 var _checkPending=false; // 準備チェックの保存待ち中フラグ（自動リロードブロック用）
 var _touchedSites=[]; // 今回変更した現場ID（GASマージ保存の対象範囲）
 var _deletedRepairIds=[]; // 今回削除した修理ID
-function markSiteTouched(siteId){ if(siteId&&_touchedSites.indexOf(siteId)<0)_touchedSites.push(siteId); }
+var SERVER_V=1;          // GAS側のバージョン（getAll応答のvで判定。2以上でマージ送信・差分adjust）
+var _saveQueued=false;   // 保存中に来た保存要求を捨てずに、完了後に続けて実行するためのフラグ
+var _mutGen=0;           // ローカル変更の世代番号（応答待ち中の自動リロードで巻き戻らないための判定用）
+var _dirtySiteIds=[], _deletedSiteIds=[];      // 現場行の変更・削除（v2マージ送信用）
+var _dirtyTMIds=[], _deletedTMIds=[], _renameTMs=[]; // 工具マスターの変更・削除・名称変更
+var _dirtyMemberIds=[], _deletedMemberIds=[];  // メンバーの変更・削除
+var _dirtyRepairIds=[];                        // 修理の変更
+var _cfgDirty=false;                           // アプリ設定の変更
+function bumpGen(){_mutGen++;}
+function markSiteTouched(siteId){ bumpGen(); if(siteId&&_touchedSites.indexOf(siteId)<0)_touchedSites.push(siteId); }
+function markSiteDirty(id){ bumpGen(); if(id&&_dirtySiteIds.indexOf(id)<0)_dirtySiteIds.push(id); }
+function markDirtyTM(id){ bumpGen(); if(id&&_dirtyTMIds.indexOf(id)<0)_dirtyTMIds.push(id); }
+function markDirtyMember(id){ bumpGen(); if(id&&_dirtyMemberIds.indexOf(id)<0)_dirtyMemberIds.push(id); }
+function markDirtyRepair(id){ bumpGen(); if(id&&_dirtyRepairIds.indexOf(id)<0)_dirtyRepairIds.push(id); }
+function markCfgDirty(){ bumpGen(); _cfgDirty=true; }
+function markDeletedItem(id){ bumpGen(); if(id&&_deletedItemIds.indexOf(id)<0)_deletedItemIds.push(id); }
+function markDeletedRepair(id){ bumpGen(); if(id&&_deletedRepairIds.indexOf(id)<0)_deletedRepairIds.push(id); }
+function markDeletedSite(id){ bumpGen(); if(id&&_deletedSiteIds.indexOf(id)<0)_deletedSiteIds.push(id); }
+function markDeletedTM(id){ bumpGen(); if(id&&_deletedTMIds.indexOf(id)<0)_deletedTMIds.push(id); }
+function markDeletedMember(id){ bumpGen(); if(id&&_deletedMemberIds.indexOf(id)<0)_deletedMemberIds.push(id); }
 
 // ============================================================
 // ユーティリティ
@@ -659,13 +678,13 @@ function execTransfer(){
   // 移動元が0になったら現場から削除
   var srcRemoved=item.qty<=0;
   if(srcRemoved){
-    _deletedItemIds.push(item.id); // マージ復活防止
+    markDeletedItem(item.id); // マージ復活防止
     var si=items.indexOf(item);
     if(si>=0)items.splice(si,1);
     var srcSite=findSite(item.site);
     if(srcSite&&srcSite.tools&&item.ref){
       var sti=srcSite.tools.findIndex(function(x){return x.id===item.ref;});
-      if(sti>=0)srcSite.tools.splice(sti,1);
+      if(sti>=0){srcSite.tools.splice(sti,1);markSiteDirty(srcSite.id);}
     }
   }
   // 移動先のitemを探す or 作る
@@ -684,7 +703,7 @@ function execTransfer(){
     var s=findSite(toSite);
     if(s&&refId){
       s.tools=s.tools||[];
-      if(!s.tools.find(function(x){return x.id===refId;}))s.tools.push({id:refId,qty:_trQty});
+      if(!s.tools.find(function(x){return x.id===refId;})){s.tools.push({id:refId,qty:_trQty});markSiteDirty(s.id);}
     }
   }
   // 履歴記録
@@ -740,7 +759,7 @@ function completeRepairFromBtn(el){
   showModal(h);
 }
 function doCompleteRepair(rid){
-  _deletedRepairIds.push(rid); // マージ保存で削除を反映
+  markDeletedRepair(rid); // マージ保存で削除を反映
   repairs=repairs.filter(function(r){return r.id!==rid;});
   toast('✅ 修理完了として削除しました');
   openRepairModal();
@@ -852,7 +871,7 @@ function deleteRepairConfirm(rid,name){
   showModal(h);
 }
 function doDeleteRepair(rid){
-  _deletedRepairIds.push(rid); // マージ保存で削除を反映
+  markDeletedRepair(rid); // マージ保存で削除を反映
   repairs=repairs.filter(function(r){return r.id!==rid;});
   toast('修理記録を削除しました');
   openRepairModal();
@@ -907,10 +926,13 @@ function saveRepair(){
     var r=repairs.find(function(x){return x.id===_repairEditId;});
     if(r){
       r.tmId=tmId;r.toolName=tm?tm.name:'';r.siteId=siteId;r.siteName=s?s.name:'';r.issue=issue;r.photo=_repairPhoto;r.qty=qty;
+      markDirtyRepair(r.id);
       toast('更新しました');
     }
   } else {
-    repairs.push({id:mkId(),ts:Date.now(),tmId:tmId,toolName:tm?tm.name:'',siteId:siteId,siteName:s?s.name:'',issue:issue,photo:_repairPhoto,qty:qty,user:curUser||''});
+    var newRepairId=mkId();
+    repairs.push({id:newRepairId,ts:Date.now(),tmId:tmId,toolName:tm?tm.name:'',siteId:siteId,siteName:s?s.name:'',issue:issue,photo:_repairPhoto,qty:qty,user:curUser||''});
+    markDirtyRepair(newRepairId);
     toast('🔧 修理を登録しました');
   }
   _repairEditId=null;_repairPhoto='';
@@ -1061,7 +1083,6 @@ function adjBy(d){
   var max=pendType==='out'?ci.inCompany:item.qty;
   if(el){el.value=qVal;el.style.border=qVal>max?'2px solid #dc2626':'1px solid #e2e8f0';}
 }
-function saveNote(){var e=document.getElementById('adj-note');if(e)window._adjNote=e.value;}
 function closeAdjModal(){window._adjNote='';closeModal();}
 function execAdjust(){
   var item=findItem(pendId); if(!item)return;
@@ -1077,15 +1098,16 @@ function execAdjust(){
     if(amt>item.qty){toast('現場に返却できる工具がありません（現場'+item.qty+item.unit+'）');return;}
     item.qty-=amt;
   }
+  bumpGen(); // ローカル変更あり（応答待ち中の自動リロードで巻き戻らないように）
   var itemRemoved=(pendType==='in'&&item.qty<=0);
   if(itemRemoved){
-    _deletedItemIds.push(item.id); // マージ復活防止
+    markDeletedItem(item.id); // マージ復活防止
     var idx=items.indexOf(item);
     if(idx>=0)items.splice(idx,1);
     var s=findSite(item.site);
     if(s&&s.tools&&item.ref){
       var ti=s.tools.findIndex(function(x){return x.id===item.ref;});
-      if(ti>=0)s.tools.splice(ti,1);
+      if(ti>=0){s.tools.splice(ti,1);markSiteDirty(s.id);}
     }
   }
   var now=new Date(), ds=now.getFullYear()+'/'+(now.getMonth()+1)+'/'+now.getDate(), ts=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
@@ -1098,7 +1120,7 @@ function execAdjust(){
   if(itemRemoved){
     saveAll(null, true);
   } else {
-    gasAdjust(hEntry, item.qty, null);
+    gasAdjust(hEntry, item.qty, pendType, amt, null);
   }
 }
 
@@ -1199,7 +1221,7 @@ function saveItem(){
       }
     });
     Object.keys(sibMap).forEach(function(sid){
-      if(!checkedSiteIds[sid]){_deletedItemIds.push(sibMap[sid].id);items=items.filter(function(x){return x.id!==sibMap[sid].id;});}
+      if(!checkedSiteIds[sid]){markDeletedItem(sibMap[sid].id);items=items.filter(function(x){return x.id!==sibMap[sid].id;});}
     });
     toast('更新しました');
   } else {
@@ -1246,10 +1268,10 @@ function confirmDel2(){
 }
 function cancelDel(){delType=null;delId=null;closeModal();}
 function execDel(){
-  if(delType==='item'){_deletedItemIds.push(delId);items=items.filter(function(x){return x.id!==delId;});editId=null;toast('品目を削除しました');closeModal();renderContent();saveAll(null);}
-  else if(delType==='member'){var nm=members.find(function(x){return x.id===delId;});var n=nm?nm.name:'';members=members.filter(function(x){return x.id!==delId;});if(n)sites.forEach(function(s){if(s.chief===n)s.chief='';s.leaders=s.leaders.map(function(l){return l===n?'':l;});});toast('メンバーを削除しました');openMembersModal();saveAll(null);}
-  else if(delType==='site'){var sid=delId;items.filter(function(x){return x.site===sid;}).forEach(function(x){_deletedItemIds.push(x.id);});items=items.filter(function(x){return x.site!==sid;});sites=sites.filter(function(x){return x.id!==sid;});if(curSiteId===sid&&sites.length>0){curSiteId=sites[0].id;siteIdx=0;}toast('現場を削除しました');openSitesModal();saveAll(null);}
-  else if(delType==='tm'){TM.splice(TM.findIndex(function(x){return x.id===delId;}),1);toast('削除しました');openToolMasterModal();saveAll(null);}
+  if(delType==='item'){markDeletedItem(delId);items=items.filter(function(x){return x.id!==delId;});editId=null;toast('品目を削除しました');closeModal();renderContent();saveAll(null);}
+  else if(delType==='member'){var nm=members.find(function(x){return x.id===delId;});var n=nm?nm.name:'';markDeletedMember(delId);members=members.filter(function(x){return x.id!==delId;});if(n)sites.forEach(function(s){var changed=false;if(s.chief===n){s.chief='';changed=true;}s.leaders=s.leaders.map(function(l){if(l===n){changed=true;return '';}return l;});if(changed)markSiteDirty(s.id);});toast('メンバーを削除しました');openMembersModal();saveAll(null);}
+  else if(delType==='site'){var sid=delId;items.filter(function(x){return x.site===sid;}).forEach(function(x){markDeletedItem(x.id);});items=items.filter(function(x){return x.site!==sid;});sites=sites.filter(function(x){return x.id!==sid;});markDeletedSite(sid);if(curSiteId===sid&&sites.length>0){curSiteId=sites[0].id;siteIdx=0;}toast('現場を削除しました');openSitesModal();saveAll(null);}
+  else if(delType==='tm'){var tmIdx=TM.findIndex(function(x){return x.id===delId;});if(tmIdx>=0)TM.splice(tmIdx,1);markDeletedTM(delId);toast('削除しました');openToolMasterModal();saveAll(null);}
   delType=null;delId=null;
 }
 
@@ -1270,33 +1292,6 @@ function renderHistory(){
     if(h.note)html+='<div style="font-size:10px;background:#f8fafc;padding:2px 7px;border-radius:4px;margin-top:3px;display:inline-block;color:#64748b">'+esc(h.note)+'</div>';
     html+='</div><div style="text-align:right"><div style="font-size:10px;color:#94a3b8">残</div><div style="font-size:16px;font-weight:700;color:#1e293b">'+h.after+esc(unit)+'</div></div></div>';
   });
-  document.getElementById('content').innerHTML=html;
-}
-
-// ============================================================
-// アラートタブ
-// ============================================================
-function renderAlerts(){
-  var di=items.filter(function(x){return getStatus(x)==='danger';});
-  var ui=items.filter(function(x){return getHolders(x.id).length>0;});
-  if(!di.length&&!ui.length){document.getElementById('content').innerHTML='<div class="empty-state" style="color:#16a34a"><div style="font-size:36px;margin-bottom:10px">✅</div><div style="font-size:13px;font-weight:700">すべて正常です</div></div>';return;}
-  var html='';
-  if(di.length){
-    html+='<div class="section-label">🔴 在庫不足（5個以下）</div>';
-    di.forEach(function(item){
-      var s=findSite(item.site), ip=isPhoto(item.photo)?'<div style="font-size:26px;flex-shrink:0;margin-right:10px"><img src="'+item.photo+'" style="width:38px;height:38px;border-radius:8px;object-fit:cover"></div>':'<div style="font-size:26px;flex-shrink:0;margin-right:10px">'+esc(item.photo||'🔧')+'</div>';
-      html+='<div class="alert-card">'+ip+'<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(item.name)+'</div><div style="font-size:10px;color:#64748b;margin-top:1px">'+(s?esc(s.name):'')+'</div></div><div><div style="font-size:24px;font-weight:700;color:#dc2626">'+item.qty+'</div><div style="font-size:10px;color:#64748b;text-align:right">'+esc(item.unit)+'</div></div></div>';
-    });
-  }
-  if(ui.length){
-    html+='<div class="section-label">📤 持出し中（未返却）</div>';
-    ui.forEach(function(item){
-      var holders=getHolders(item.id);
-      html+='<div class="unret-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(item.name)+'</div><span style="font-size:10px;background:#fff3e8;color:#c2410c;padding:2px 8px;border-radius:10px;font-weight:600">'+holders.length+'名持出中</span></div>';
-      holders.forEach(function(hd){html+='<div style="display:flex;align-items:center;padding:5px 0;border-top:1px solid #f1f5f9"><div style="width:26px;height:26px;border-radius:50%;background:#e8f0ff;color:#1241a8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;margin-right:8px">'+esc(hd.user.charAt(0))+'</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:#1e293b">'+esc(hd.user)+'</div><div style="font-size:10px;color:#94a3b8">'+fmtFull(hd.ts)+'</div></div><div style="font-size:13px;font-weight:700;color:#f97316">'+hd.amt+esc(item.unit)+'</div></div>';});
-      html+='</div>';
-    });
-  }
   document.getElementById('content').innerHTML=html;
 }
 
@@ -1517,7 +1512,8 @@ function reRenderSitePicker(){
 }
 function saveSiteEdit(el){
   var idx=parseInt(el.dataset.idx);
-  markSiteTouched(sites[idx].id); // 編集した現場
+  markSiteTouched(sites[idx].id); // 編集した現場（在庫マージの対象範囲）
+  markSiteDirty(sites[idx].id);   // 現場行（責任者・班長・工具表）の変更をマージ送信
   if(isAdmin){
     var ce=document.getElementById('se-chief');if(ce)sites[idx].chief=ce.value;
     var l0=document.getElementById('se-l0'),l1=document.getElementById('se-l1'),l2=document.getElementById('se-l2');
@@ -1554,7 +1550,7 @@ function saveSiteEdit(el){
   var toolIds=finalTools.map(function(e){return e.id;});
   // remove items no longer in tools list
   // 削除されるアイテムを記録してからフィルタ
-  items.filter(function(x){return x.site===siteId&&x.ref&&toolIds.indexOf(x.ref)<0;}).forEach(function(x){_deletedItemIds.push(x.id);});
+  items.filter(function(x){return x.site===siteId&&x.ref&&toolIds.indexOf(x.ref)<0;}).forEach(function(x){markDeletedItem(x.id);});
   items=items.filter(function(x){return x.site!==siteId||!x.ref||toolIds.indexOf(x.ref)>=0;});
   // add/update items for each tool（数量変更があれば操作履歴に記録）
   var siteName=sites[idx].name;
@@ -1587,7 +1583,9 @@ function openNewSiteModal(){
 function saveNewSite(){
   var name=document.getElementById('ns-name').value.trim();
   if(!name){toast('現場名を入力してください');return;}
-  sites.push({id:mkId(),name:name,chief:document.getElementById('ns-chief').value,leaders:[document.getElementById('ns-l0').value,document.getElementById('ns-l1').value,document.getElementById('ns-l2').value],tools:[]});
+  var newSiteId=mkId();
+  sites.push({id:newSiteId,name:name,chief:document.getElementById('ns-chief').value,leaders:[document.getElementById('ns-l0').value,document.getElementById('ns-l1').value,document.getElementById('ns-l2').value],tools:[]});
+  markSiteDirty(newSiteId);
   closeModal(); toast('現場「'+name+'」を追加しました'); renderSiteScreen();
   if(curSiteId)renderSiteTabs();
   saveAll(null);
@@ -1642,9 +1640,9 @@ function openMembersModal(){
 function openMemEditFromBtn(el){editMemIdx=parseInt(el.dataset.idx);openMemEdit();}
 function delMemFromBtn(el){showDeleteConfirm('member',el.dataset.id,el.dataset.name);}
 function openMemAdd(){showModal('<div class="modal-title">メンバー追加</div><label class="lbl">名前</label><input id="mem-name" class="inp" type="text" placeholder="例：田村 健"><div class="modal-actions"><button class="btn-cancel" onclick="openMembersModal()">戻る</button><button class="btn-primary" onclick="saveMemAdd()">追加</button></div>');}
-function saveMemAdd(){var name=document.getElementById('mem-name').value.trim();if(!name){toast('名前を入力してください');return;}members.push({id:mkId(),name:name,admin:false});toast('👤 '+name+' を追加しました');openMembersModal();saveAll(null);}
+function saveMemAdd(){var name=document.getElementById('mem-name').value.trim();if(!name){toast('名前を入力してください');return;}var newMemId=mkId();members.push({id:newMemId,name:name,admin:false});markDirtyMember(newMemId);toast('👤 '+name+' を追加しました');openMembersModal();saveAll(null);}
 function openMemEdit(){var m=members[editMemIdx];if(!m)return;showModal('<div class="modal-title">メンバー編集</div><label class="lbl">名前</label><input id="mem-edit-name" class="inp" type="text" value="'+esc(m.name)+'"><div class="modal-actions"><button class="btn-cancel" onclick="openMembersModal()">戻る</button><button class="btn-primary" onclick="saveMemEdit()">保存</button></div>');}
-function saveMemEdit(){var name=document.getElementById('mem-edit-name').value.trim();if(!name){toast('名前を入力してください');return;}var old=members[editMemIdx].name;members[editMemIdx].name=name;if(old!==name)sites.forEach(function(s){if(s.chief===old)s.chief=name;s.leaders=s.leaders.map(function(l){return l===old?name:l;});});toast('更新しました');openMembersModal();saveAll(null);}
+function saveMemEdit(){var name=document.getElementById('mem-edit-name').value.trim();if(!name){toast('名前を入力してください');return;}var old=members[editMemIdx].name;members[editMemIdx].name=name;markDirtyMember(members[editMemIdx].id);if(old!==name)sites.forEach(function(s){var changed=false;if(s.chief===old){s.chief=name;changed=true;}s.leaders=s.leaders.map(function(l){if(l===old){changed=true;return name;}return l;});if(changed)markSiteDirty(s.id);});toast('更新しました');openMembersModal();saveAll(null);}
 
 // ============================================================
 // 工具マスター管理
@@ -1818,8 +1816,12 @@ function saveTMEdit(el){
   var newPhoto=window._tmePhotoData||t.photo||'';
   t.name=name; t.cat=newCat; t.yomis=yomisArr; t.yomi=yomisArr[0]; t.unit=document.getElementById('tme-unit').value||'個'; t.total=parseInt(document.getElementById('tme-total').value)||0; t.photo=newPhoto;
   items.forEach(function(x){if(x.ref===id){x.name=name;x.cat=newCat;x.photo=newPhoto;}});
+  markDirtyTM(id);
+  // 全現場のitemsへの名称反映はGAS側で行う（name/cat/photo列のみ更新。
+  // 以前の「全上書き」は他ユーザーの持出し・返却を巻き戻すため廃止）
+  _renameTMs.push({id:id,name:name,cat:newCat,photo:newPhoto.indexOf('data:')===0?'':newPhoto});
   toast('更新しました'); window._tmePhotoData=''; renderTMModal();
-  saveAll(null, false, true); // 全現場のitems名称を反映するため全上書き
+  saveAll(null);
 }
 function deleteTMFromBtn(el){var t=findTM(el.dataset.tmid);if(t)showDeleteConfirm('tm',el.dataset.tmid,t.name);}
 function openAddTM(){
@@ -1843,84 +1845,11 @@ function saveTM(){
   var yomiChks=document.querySelectorAll('.kana-btn.active[data-k]');
   var yomisArr=Array.from(yomiChks).map(function(b){return b.dataset.k;});
   if(!yomisArr.length){toast('読みを1つ以上選択してください');return;}
-  TM.push({id:mkId(),name:name,cat:document.getElementById('tm-cat').value||'工具',yomis:yomisArr,yomi:yomisArr[0],unit:document.getElementById('tm-unit').value.trim()||'個',total:parseInt(document.getElementById('tm-total').value)||0,photo:''});
+  var newTmId=mkId();
+  TM.push({id:newTmId,name:name,cat:document.getElementById('tm-cat').value||'工具',yomis:yomisArr,yomi:yomisArr[0],unit:document.getElementById('tm-unit').value.trim()||'個',total:parseInt(document.getElementById('tm-total').value)||0,photo:''});
+  markDirtyTM(newTmId);
   toast('追加しました：'+name); updateCnts(); renderTMModal();
   saveAll(null);
-}
-
-// ============================================================
-// 現場への工具追加（マスターから）
-// ============================================================
-function openAddFromMaster(){addKana='';_addSearch='';renderAddFromMaster();}
-function renderAddFromMaster(){
-  var site=findSite(curSiteId), stools=(site&&site.tools)||[];
-  // 現場の工具表に登録された工具のみ対象
-  var siteTM=TM.filter(function(t){return stools.indexOf(t.id)>=0;});
-  var kanas=siteTM.reduce(function(acc,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&acc.indexOf(y)<0)acc.push(y);});return acc;},[]).sort();
-  var filtered=addKana?siteTM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(addKana)>=0;}):siteTM;
-  if(_addSearch)filtered=filtered.filter(function(t){return matchSearch(t.name,_addSearch);});
-  var existSet={};
-  items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
-  var h='<div class="modal-title">工具を追加</div><div class="modal-sub">この現場の工具表から選んで追加します</div>';
-  h+='<input id="srch-add" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_addSearch)+'" oninput="searchInput(\'srch-add\',\'_addSearch\',updateAddResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-add\',\'_addSearch\',updateAddResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
-  if(!siteTM.length){
-    h+='<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">この現場の工具表が未設定です<br>管理者に工具表の設定を依頼してください</div>';
-    h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">閉じる</button></div>';
-    showModal(h); return;
-  }
-  if(kanas.length>1){
-    h+='<label class="lbl">読みで絞り込む</label>';
-    h+='<div class="kana-wrap">';
-    kanas.forEach(function(k){h+='<button class="kana-btn'+(addKana===k?' active':'')+'" data-k="'+esc(k)+'" onclick="setAddKana2(this.dataset.k)">'+esc(k)+'</button>';});
-    if(addKana)h+='<button class="kana-btn" onclick="clearAddKana()">✕</button>';
-    h+='</div>';
-  }
-  h+='<div id="add-results">';
-  h+='<label class="lbl">工具を選択</label>';
-  h+='<select class="sel" id="add-tm-sel" onchange="addTMSelChange()">';
-  h+='<option value="">工具を選択してください</option>';
-  filtered.forEach(function(t){h+='<option value="'+t.id+'">'+esc(t.name)+'（'+t.total+t.unit+'）'+(existSet[t.id]?' ★登録済':'')+'</option>';});
-  h+='</select>';
-  h+='<div id="add-tm-detail"></div>';
-  h+='</div>';
-  h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">キャンセル</button></div>';
-  showModal(h);
-}
-function updateAddResults(){
-  var el=document.getElementById('add-results');if(!el)return;
-  var site=findSite(curSiteId), stools=(site&&site.tools)||[];
-  var siteTM=TM.filter(function(t){return stools.indexOf(t.id)>=0;});
-  var filtered=addKana?siteTM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(addKana)>=0;}):siteTM;
-  if(_addSearch)filtered=filtered.filter(function(t){return matchSearch(t.name,_addSearch);});
-  var existSet={};
-  items.filter(function(x){return x.site===curSiteId&&x.ref;}).forEach(function(x){existSet[x.ref]=true;});
-  var h='<label class="lbl">工具を選択</label>';
-  h+='<select class="sel" id="add-tm-sel" onchange="addTMSelChange()">';
-  h+='<option value="">工具を選択してください</option>';
-  filtered.forEach(function(t){h+='<option value="'+t.id+'">'+esc(t.name)+'（'+t.total+t.unit+'）'+(existSet[t.id]?' ★登録済':'')+'</option>';});
-  h+='</select>';
-  h+='<div id="add-tm-detail"></div>';
-  el.innerHTML=h;
-}
-function setAddKana2(k){addKana=k;renderAddFromMaster();}
-function setAddKana(el){addKana=activeKanas()[parseInt(el.dataset.idx)];renderAddFromMaster();}
-function clearAddKana(){addKana='';renderAddFromMaster();}
-function addTMSelChange(){
-  var sel=document.getElementById('add-tm-sel'); if(!sel)return;
-  var id=sel.value, det=document.getElementById('add-tm-detail'); if(!det)return;
-  if(!id){det.innerHTML='';return;}
-  var h='<label class="lbl">現場への持出し数（初期値）</label><input id="add-qty" class="inp" type="number" value="0" min="0">';
-  h+='<label class="lbl">カテゴリ</label><select id="add-cat" class="sel"><option>工具</option><option>機械</option><option>保護具</option><option>消耗品</option><option>その他</option></select>';
-  h+='<button class="btn-full" style="background:#f97316;color:#fff" onclick="saveAddFromMaster()">追加</button>';
-  det.innerHTML=h;
-}
-function saveAddFromMaster(){
-  var sel=document.getElementById('add-tm-sel'); if(!sel||!sel.value){toast('工具を選択してください');return;}
-  var tmId=sel.value, tm=findTM(tmId); if(!tm)return;
-  var qty=parseInt((document.getElementById('add-qty')||{}).value)||0;
-  var cat=(document.getElementById('add-cat')||{}).value||'工具';
-  items.push({id:mkId(),name:tm.name,cat:cat,site:curSiteId,unit:tm.unit,total:tm.total,qty:qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});
-  toast('📦 '+tm.name+' を追加しました'); closeModal(); renderContent();
 }
 
 // ============================================================
@@ -1954,7 +1883,7 @@ function cfgPrev(v){var p=document.getElementById('cfg-prev');if(p)p.textContent
 function triggerCfgPhoto(){var e=document.getElementById('cfg-photo');if(e)e.click();}
 function handleCfgPhoto(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){cfg.bg=ev.target.result;openAppSettings();};r.readAsDataURL(f);}
 function clearCfgBg(){cfg.bg='';openAppSettings();}
-function saveCfg(){var t=document.getElementById('cfg-title');if(t){var v=t.value.trim();if(v)cfg.title=v;}applyStyle();closeModal();toast('アプリ設定を保存しました');saveAll(null);}
+function saveCfg(){var t=document.getElementById('cfg-title');if(t){var v=t.value.trim();if(v)cfg.title=v;}markCfgDirty();applyStyle();closeModal();toast('アプリ設定を保存しました');saveAll(null);}
 
 // ============================================================
 // 写真クロップ
@@ -2214,8 +2143,16 @@ function gasPostJson(body, cb){
 // ============================================================
 // 共通データ適用（GASレスポンス → グローバル変数）
 // ============================================================
+// シート由来の写真フィールドの安全化：
+// URL形式（http/data:）なのに引用符や空白を含むものは表示に使わない
+function cleanPhoto(p){
+  p=(p==null)?'':String(p);
+  if((p.indexOf('http')===0||p.indexOf('data:')===0)&&/["'<>\s]/.test(p))return '';
+  return p;
+}
 function applyLoadedData(data){
-  if(data.cfg&&typeof data.cfg==='object') Object.assign(cfg, data.cfg);
+  if(data.v)SERVER_V=data.v; // GAS側のバージョンを記録（送信方式の自動切替に使う）
+  if(data.cfg&&typeof data.cfg==='object'){Object.assign(cfg, data.cfg);cfg.bg=cleanPhoto(cfg.bg);}
   if(Array.isArray(data.members)){
     members=data.members.filter(function(m){return m&&typeof m.name==='string'&&m.name.length>0;});
   }
@@ -2230,12 +2167,13 @@ function applyLoadedData(data){
     TM=data.TM.filter(function(t){return t&&typeof t.name==='string';}).map(function(t){
       t.yomis=Array.isArray(t.yomis)?t.yomis:(typeof t.yomis==='string'&&t.yomis?t.yomis.split(',').filter(Boolean):(t.yomi?[t.yomi]:[]));
       t.total=parseInt(t.total)||0;
+      t.photo=cleanPhoto(t.photo);
       return t;
     });
   }
-  if(data.items&&Array.isArray(data.items)) items=data.items;
+  if(data.items&&Array.isArray(data.items)) items=data.items.map(function(x){x.photo=cleanPhoto(x.photo);return x;});
   if(data.hist&&Array.isArray(data.hist)) hist=data.hist;
-  if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs;
+  if(data.repairs&&Array.isArray(data.repairs)) repairs=data.repairs.map(function(r){r.photo=cleanPhoto(r.photo);return r;});
   GAS_LOADED=true;
 }
 
@@ -2272,10 +2210,17 @@ function loadAll(){
 // ============================================================
 function refreshData(){
   showLoading('データを更新しています...');
+  var gen=_mutGen; // リクエスト時点のローカル変更世代
   gasGet({action:'getAll'},function(err,data){
     hideLoading();
     if(err||!data||data.error){
       toast('⚠ 更新に失敗しました');
+      return;
+    }
+    // 応答待ちの間に操作があった場合、この（取得時点の古い）データで
+    // 上書きすると未保存の操作が巻き戻るため適用しない
+    if(gen!==_mutGen||_saveInProgress||_checkPending){
+      toast('操作直後のため更新を見送りました。もう一度お試しください');
       return;
     }
     applyLoadedData(data);
@@ -2303,8 +2248,14 @@ function silentReload(){
   // クロップオーバーレイが開いている間もスキップ
   if(document.getElementById('crop-overlay'))return;
 
+  var gen=_mutGen; // リクエスト時点のローカル変更世代
   gasGet({action:'getAll'},function(err,data){
     if(err||!data||data.error)return; // 失敗は無視
+    // 応答待ちの数秒間に操作・保存が始まっていたら、この（古い）応答は捨てる。
+    // リクエスト開始時のチェックだけでは、応答が返るまでの間の操作を守れないため
+    if(gen!==_mutGen||_saveInProgress||_checkPending||_photoUploadPending)return;
+    if(document.getElementById('modal-bg').classList.contains('show'))return;
+    if(document.getElementById('crop-overlay'))return;
     applyLoadedData(data);
     reconcileDeletedItems(data);
     rerenderCurrentScreen();
@@ -2329,47 +2280,107 @@ function reconcileDeletedItems(serverData){
 
 // ============================================================
 // 全データ保存（操作後に呼ぶ）
-// GAS側でマージ保存できるよう、変更範囲（touchedSites）と削除IDも送る。
-// これにより他ユーザーが同時操作しても互いのデータを消さない。
+// v2 GAS: 変更したデータだけを merge フラグ付きで送る。
+//   送らないシートはGAS側で保持されるため、自分が変更していない
+//   members / sites / TM / cfg を古いデータで上書きしてしまう事故が起きない。
+// 旧 GAS（v:2 が返らない場合）: 従来形式で全データを送る（後方互換）。
 // ============================================================
-function saveAll(cb, silent, forceFull){
+function saveAll(cb, silent){
   if(!GAS_LOADED) { if(cb)cb(); return; }
-  if(_saveInProgress){ if(cb)cb(); return; } // 二重実行防止
+  if(_saveInProgress){ _saveQueued=true; if(cb)cb(); return; } // 実行中なら完了後に自動で続けて保存
   _saveInProgress=true;
   if(!silent)showLoading('保存中...');
-  // このsaveAllで送る変更範囲・削除情報のスナップショット
-  var sentTouched=_touchedSites.slice();
+
+  // 送信分のスナップショット。
+  // touched/dirty系はここで取り外し、送信中に発生した新しい変更は次回分として貯める。
+  var sentTouched=_touchedSites;         _touchedSites=[];
+  var sentDirtySites=_dirtySiteIds;      _dirtySiteIds=[];
+  var sentDirtyTM=_dirtyTMIds;           _dirtyTMIds=[];
+  var sentDirtyMembers=_dirtyMemberIds;  _dirtyMemberIds=[];
+  var sentDirtyRepairs=_dirtyRepairIds;  _dirtyRepairIds=[];
+  var sentRenames=_renameTMs;            _renameTMs=[];
+  var sentCfg=_cfgDirty;                 _cfgDirty=false;
+  // 削除系は成功が確認できるまで保持（リロード時の復活防止にも使うため）
   var sentDelItems=_deletedItemIds.slice();
   var sentDelRepairs=_deletedRepairIds.slice();
+  var sentDelSites=_deletedSiteIds.slice();
+  var sentDelTM=_deletedTMIds.slice();
+  var sentDelMembers=_deletedMemberIds.slice();
+
   // 写真(base64)はスプレッドシートに保存しない（URLのみ保存）
-  var dataObj={
-    cfg:cfg,
-    members:members,
-    sites:sites,
-    TM:TM.map(function(t){var p=t.photo||'';return Object.assign({},t,{photo:p.indexOf('data:')===0?'':p});}),
-    items:items.map(function(x){var p=x.photo||'';return Object.assign({},x,{photo:p.indexOf('data:')===0?'':p});}),
-    hist:hist,
-    repairs:repairs.map(function(r){var p=r.photo||'';return Object.assign({},r,{photo:p.indexOf('data:')===0?'':p});})
-  };
-  // forceFull=trueのマスタ操作（工具マスタ編集など）は従来の全上書き。
-  // それ以外はマージ用の変更範囲情報を付与する。
-  if(!forceFull){
+  function stripPhoto(x){var p=x.photo||'';return Object.assign({},x,{photo:p.indexOf('data:')===0?'':p});}
+
+  var dataObj={hist:hist};
+  if(SERVER_V>=2){
+    // ▼ v2: 変更したものだけ送る
+    if(sentCfg)dataObj.cfg=cfg;
+    if(sentDirtyMembers.length||sentDelMembers.length){
+      dataObj.mergeMembers=true;
+      dataObj.members=members.filter(function(m){return sentDirtyMembers.indexOf(m.id)>=0;});
+      dataObj.deletedMemberIds=sentDelMembers;
+    }
+    if(sentDirtyTM.length||sentDelTM.length){
+      dataObj.mergeTM=true;
+      dataObj.TM=TM.filter(function(t){return sentDirtyTM.indexOf(t.id)>=0;}).map(stripPhoto);
+      dataObj.deletedTMIds=sentDelTM;
+    }
+    if(sentDirtySites.length||sentDelSites.length){
+      dataObj.mergeSites=true;
+      dataObj.sites=sites.filter(function(s){return sentDirtySites.indexOf(s.id)>=0;});
+      dataObj.deletedSiteIds=sentDelSites;
+    }
+    if(sentTouched.length||sentDelItems.length){
+      dataObj.items=items.filter(function(x){return sentTouched.indexOf(x.site)>=0;}).map(stripPhoto);
+      dataObj.touchedSites=sentTouched;
+      dataObj.deletedItemIds=sentDelItems;
+    }
+    if(sentDirtyRepairs.length||sentDelRepairs.length){
+      dataObj.mergeRepairs=true;
+      dataObj.repairs=repairs.filter(function(r){return sentDirtyRepairs.indexOf(r.id)>=0;}).map(stripPhoto);
+      dataObj.deletedRepairIds=sentDelRepairs;
+    }
+    if(sentRenames.length)dataObj.renameTM=sentRenames;
+  } else {
+    // ▼ 旧GAS向け: 従来形式（全データ送信）
+    dataObj.cfg=cfg;
+    dataObj.members=members;
+    dataObj.sites=sites;
+    dataObj.TM=TM.map(stripPhoto);
+    dataObj.items=items.map(stripPhoto);
+    dataObj.repairs=repairs.map(stripPhoto);
     dataObj.touchedSites=sentTouched;
     dataObj.deletedItemIds=sentDelItems;
     dataObj.deletedRepairIds=sentDelRepairs;
     dataObj.mergeRepairs=true;
+    // 工具マスター名変更がある場合は旧仕様どおり全上書きで反映（旧GASにrenameTMは無い）
+    if(sentRenames.length){delete dataObj.touchedSites;delete dataObj.deletedItemIds;}
   }
+
   var payload={action:'saveAll',data:dataObj};
   function onDone(ok){
     _saveInProgress=false;
     if(!silent)hideLoading();
     if(ok){
-      // 送信できた分だけ追跡リストから除去（送信中に増えた分は次回に持ち越し）
-      _touchedSites=_touchedSites.filter(function(s){return sentTouched.indexOf(s)<0;});
+      // 送信できた削除IDを追跡リストから除去（送信中に増えた分は次回に持ち越し）
       _deletedItemIds=_deletedItemIds.filter(function(id){return sentDelItems.indexOf(id)<0;});
       _deletedRepairIds=_deletedRepairIds.filter(function(id){return sentDelRepairs.indexOf(id)<0;});
+      _deletedSiteIds=_deletedSiteIds.filter(function(id){return sentDelSites.indexOf(id)<0;});
+      _deletedTMIds=_deletedTMIds.filter(function(id){return sentDelTM.indexOf(id)<0;});
+      _deletedMemberIds=_deletedMemberIds.filter(function(id){return sentDelMembers.indexOf(id)<0;});
+    } else {
+      // 失敗時は取り外した変更フラグを戻し、次回の保存で再送する
+      sentTouched.forEach(markSiteTouched);
+      sentDirtySites.forEach(markSiteDirty);
+      sentDirtyTM.forEach(markDirtyTM);
+      sentDirtyMembers.forEach(markDirtyMember);
+      sentDirtyRepairs.forEach(markDirtyRepair);
+      sentRenames.forEach(function(r){_renameTMs.push(r);});
+      if(sentCfg)_cfgDirty=true;
+      if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
     }
     if(cb)cb();
+    // 保存中に来ていた保存要求を続けて実行（変更を取りこぼさない）
+    if(_saveQueued){_saveQueued=false;saveAll(null,true);}
   }
   gasPostJson(payload, function(err, res){
     if(err||!res||res.status!=='ok'){
@@ -2378,7 +2389,6 @@ function saveAll(cb, silent, forceFull){
       gasPostJson(payload, function(err2, res2){
         if(err2||!res2||res2.status!=='ok'){
           console.warn('保存失敗（リトライ）',err2,res2);
-          if(!silent)toast('⚠ 保存に失敗しました（通信エラー）');
           onDone(false);
         } else {
           onDone(true);
@@ -2393,32 +2403,76 @@ function saveAll(cb, silent, forceFull){
 
 // ============================================================
 // 持出し・返却の差分送信（リアルタイム記録用）
+// v2 GAS: type と amt を送り、GASがロック内で現在値から加減算する（差分方式）。
+//   複数人が同時に持出しても互いの記録が消えない。
+//   応答で確定後の残数が返るため、ローカル表示もサーバーと一致させる。
+// 旧 GAS: 従来の絶対値方式（no-cors）で送る（後方互換）。
 // ============================================================
-function gasAdjust(histEntry, itemAfterQty, cb){
+function gasAdjust(histEntry, itemAfterQty, type, amt, cb){
   if(!GAS_LOADED){if(cb)cb();return;}
   _saveInProgress=true; // 送信完了まで自動リロードをブロック（巻き戻り防止）
-  gasPost({
-    action:'adjust',
-    hist:histEntry,
-    itemId:histEntry.iid,
-    qty:itemAfterQty
-  },function(err,res){
-    if(err||!res||res.status!=='ok'){
-      // adjust失敗 → saveAll（全体保存）でリカバリ。silentでUXを止めない
-      console.warn('adjust送信失敗、saveAllでリカバリ',err,res);
-      _saveInProgress=false; // saveAll側で再度立て直す
-      saveAll(cb, true);
-      return;
-    }
-    // no-corsの送信完了後、GASの書き込みが確実に終わるまで少し猶予を持たせてから
-    // フラグを解除する（直後の自動リロードで古いデータを取得して巻き戻るのを防ぐ）
-    setTimeout(function(){ _saveInProgress=false; if(cb)cb(); }, 1500);
-  });
+
+  function fallbackSaveAll(){
+    // adjust失敗 → saveAll（全体保存）でリカバリ。
+    // この現場をtouchedにして、qtyの変更が確実にマージ保存に含まれるようにする
+    console.warn('adjust送信失敗、saveAllでリカバリ');
+    _saveInProgress=false; // saveAll側で再度立て直す
+    markSiteTouched(histEntry.site);
+    saveAll(cb, true);
+  }
+
+  if(SERVER_V>=2){
+    gasPostJson({
+      action:'adjust',
+      hist:histEntry,
+      itemId:histEntry.iid,
+      type:type,
+      amt:amt
+    },function(err,res){
+      if(err||!res||res.status!=='ok'){
+        console.warn('adjust失敗',err,res);
+        fallbackSaveAll();
+        return;
+      }
+      // サーバーで確定した残数をローカルに反映（他ユーザーの同時操作分も正しく合算される）
+      if(res.qty!=null){
+        var it=findItem(histEntry.iid);
+        if(it&&it.qty!==res.qty){
+          it.qty=res.qty;
+          histEntry.after=res.qty;
+          renderContent();
+        }
+      }
+      _saveInProgress=false;
+      if(cb)cb();
+    });
+  } else {
+    gasPost({
+      action:'adjust',
+      hist:histEntry,
+      itemId:histEntry.iid,
+      qty:itemAfterQty
+    },function(err,res){
+      if(err||!res||res.status!=='ok'){
+        fallbackSaveAll();
+        return;
+      }
+      // no-corsの送信完了後、GASの書き込みが確実に終わるまで少し猶予を持たせてから
+      // フラグを解除する（直後の自動リロードで古いデータを取得して巻き戻るのを防ぐ）
+      setTimeout(function(){ _saveInProgress=false; if(cb)cb(); }, 1500);
+    });
+  }
 }
 
 // ============================================================
 // 初期化
 // ============================================================
+// スマホがスリープ/バックグラウンドから復帰したら即座に最新データを取得する。
+// （バックグラウンド中は60秒タイマーが止まるため、復帰直後に古いデータのまま
+//   操作して他ユーザーの変更を巻き戻すのを防ぐ）
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible')silentReload();
+});
 applyStyle();
 loadAll();
 </script>
