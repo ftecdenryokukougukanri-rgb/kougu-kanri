@@ -409,6 +409,14 @@ function AC(i){var c=[['#dbeafe','#1e40af'],['#dcfce7','#166534'],['#fef9c3','#8
 function catStyle(cat){if(cat==='工具')return 'background:#e8f0ff;color:#1241a8';if(cat==='機械')return 'background:#f1f5f9;color:#475569';if(cat==='保護具')return 'background:#f0fdf4;color:#166534';if(cat==='消耗品')return 'background:#fff7ed;color:#9a3412';return 'background:#fdf4ff;color:#7e22ce';}
 function uniqCats(list){var seen={},res=['all'];list.forEach(function(x){if(!seen[x.cat]){seen[x.cat]=true;res.push(x.cat);}});return res;}
 function isPhoto(p){return p&&(p.indexOf('data:')===0||p.indexOf('http')===0);}
+// 一覧表示用の縮小サムネイルURLを返す（Driveサムネイルのszパラメータを差し替え）。
+// 保存されているURL自体は大きいサイズのまま変えない（詳細表示で使うため）
+function thumbUrl(p,w){
+  p=String(p||'');
+  if(p.indexOf('https://drive.google.com/thumbnail')!==0)return p;
+  if(/[?&]sz=/.test(p))return p.replace(/([?&]sz=)w\d+/,'$1w'+w);
+  return p+'&sz=w'+w;
+}
 function activeKanas(){var seen={};TM.forEach(function(t){(t.yomis||[t.yomi||'']).forEach(function(y){seen[y]=true;});});return Object.keys(seen).sort();}
 function applyStyle(){
   document.querySelectorAll('.hdr-bg').forEach(function(el){
@@ -522,7 +530,7 @@ function renderInventory(){
   h+='<div class="row-header"><span style="font-size:13px;font-weight:700;color:#1e293b">工具一覧</span><span style="font-size:11px;color:#94a3b8">'+filtered.length+'件</span></div>';
   filtered.forEach(function(item){
     var st=getStatus(item), holders=getHolders(item.id);
-    var img=isPhoto(item.photo)?'<img src="'+item.photo+'" alt="">':esc(item.photo||'🔧');
+    var img=isPhoto(item.photo)?'<img src="'+thumbUrl(item.photo,200)+'" loading="lazy" alt="">':esc(item.photo||'🔧');
     var ci=getCompanyInfo(item);
     var compLow=item.mach?(ci.inCompany===0):(ci.inCompany<=5);
     var ck=item.checked;
@@ -729,7 +737,7 @@ function openRepairModal(){
   } else {
     repairs.slice().sort(function(a,b){return b.ts-a.ts;}).forEach(function(r){
       var tm=r.tmId?findTM(r.tmId):null;
-      var img=isPhoto(r.photo)?'<img src="'+r.photo+'" style="width:60px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:60px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;margin-right:11px">🔧</div>';
+      var img=isPhoto(r.photo)?'<img src="'+thumbUrl(r.photo,200)+'" loading="lazy" style="width:60px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:60px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;margin-right:11px">🔧</div>';
       h+='<div style="display:flex;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9">'+img;
       h+='<div style="flex:1;min-width:0">';
       h+='<div style="font-size:14px;font-weight:700;color:#1e293b">'+esc(r.toolName||(tm?tm.name:'不明'))+' <span style="font-size:11px;color:#c2410c;font-weight:600">×'+(r.qty||1)+(tm?esc(tm.unit):'')+'</span></div>';
@@ -833,7 +841,7 @@ function renderRepTmPicker(){
   disp.forEach(function(t){
     var sel=curId===t.id;
     var photo=t.photo||'';
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:36px;height:24px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:9px">':'<div style="width:36px;height:24px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-right:9px">🔧</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:36px;height:24px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:9px">':'<div style="width:36px;height:24px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-right:9px">🔧</div>';
     h+='<div onclick="selectRepTm(\''+t.id+'\')" style="display:flex;align-items:center;padding:8px 6px;border-bottom:1px solid #f1f5f9;cursor:pointer;'+(sel?'background:#eff6ff;border-radius:6px;':'')+'">';
     h+=img;
     h+='<div style="flex:1;font-size:13px;color:#1e293b;font-weight:'+(sel?'700':'500')+'">'+esc(t.name)+'</div>';
@@ -985,7 +993,7 @@ function renderCompanyStock(){
     var inCompany=Math.max(0,tm.total-totalAtSites-inRep);
     var low=inCompany<=5;
     var photo=tm.photo||'';
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:48px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:10px">':'<div style="width:48px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-right:10px">'+esc(photo||'🔧')+'</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:48px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:10px">':'<div style="width:48px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-right:10px">'+esc(photo||'🔧')+'</div>';
     h+='<div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9">'+img;
     h+='<div style="flex:1;min-width:0">';
     h+='<div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(tm.name)+'</div>';
@@ -1020,7 +1028,7 @@ function updateCSResults(){
     var inCompany=Math.max(0,tm.total-totalAtSites-inRep);
     var low=inCompany<=5;
     var photo=tm.photo||'';
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:48px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:10px">':'<div style="width:48px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-right:10px">'+esc(photo||'🔧')+'</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:48px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:10px">':'<div style="width:48px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-right:10px">'+esc(photo||'🔧')+'</div>';
     h+='<div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9">'+img;
     h+='<div style="flex:1;min-width:0">';
     h+='<div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(tm.name)+'</div>';
@@ -1433,7 +1441,7 @@ function renderSiteToolPicker(stools){
     var qty=chk?stoolMap[t.id]:0;
     var photo=t.photo||'';
     var maxQty=Math.max(0,getSiteToolMaxQty(t.id,curSiteIdForCalc));
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:44px;height:28px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:9px;flex-shrink:0">':'<div style="width:28px;height:28px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:9px">'+esc(photo||'🔧')+'</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:44px;height:28px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:9px;flex-shrink:0">':'<div style="width:28px;height:28px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:9px">'+esc(photo||'🔧')+'</div>';
     h+='<div class="se-tool-row" data-tname="'+esc(t.name)+'" style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9">';
     h+=img;
     h+='<input type="checkbox" class="se-tool-chk" value="'+t.id+'"'+(chk?' checked':'')+' style="width:16px;height:16px;margin-right:9px;accent-color:#1a56db;flex-shrink:0" onchange="seToolChkChange(this)">';
@@ -1600,7 +1608,7 @@ function openItemsAdmin(){
   if(!items.length){h+='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:12px">品目がありません</div>';}
   else{items.forEach(function(item){
     var s=findSite(item.site), st=getStatus(item), qc=st==='danger'?'#dc2626':st==='machine'?'#94a3b8':'#16a34a';
-    var ip=isPhoto(item.photo)?'<img src="'+item.photo+'" style="width:60px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:11px;flex-shrink:0">':'<div style="width:42px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;margin-right:11px;flex-shrink:0">'+esc(item.photo||'🔧')+'</div>';
+    var ip=isPhoto(item.photo)?'<img src="'+thumbUrl(item.photo,200)+'" loading="lazy" style="width:60px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:11px;flex-shrink:0">':'<div style="width:42px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;margin-right:11px;flex-shrink:0">'+esc(item.photo||'🔧')+'</div>';
     h+='<div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9">'+ip;
     h+='<div style="flex:1;min-width:0;margin-right:8px"><div style="font-size:13px;font-weight:600;color:#1e293b">'+esc(item.name)+'</div><div style="font-size:10px;color:#64748b;margin-top:1px">'+(s?esc(s.name):'不明')+' ・ <span style="color:'+qc+';font-weight:600">'+item.qty+'/'+item.total+esc(item.unit)+'</span></div></div>';
     h+='<button data-id="'+item.id+'" onclick="openItemEditFromAdmin(this)" style="padding:6px 12px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit">編集</button>';
@@ -1735,7 +1743,7 @@ function renderTMModal(){
   if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
     var photo=t.photo||'';
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:64px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:64px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;margin-right:11px">'+esc(photo||'🔧')+'</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:64px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:64px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;margin-right:11px">'+esc(photo||'🔧')+'</div>';
     h+='<div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #f1f5f9">'+img;
     h+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#1e293b">'+esc(t.name)+'</div>';
     h+='<div style="font-size:11px;color:#64748b;margin-top:1px">総数 '+t.total+esc(t.unit)+'</div></div>';
@@ -1755,7 +1763,7 @@ function updateTMResults(){
   if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
     var photo=t.photo||'';
-    var img=isPhoto(photo)?'<img src="'+photo+'" style="width:64px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:64px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;margin-right:11px">'+esc(photo||'🔧')+'</div>';
+    var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:64px;height:42px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;flex-shrink:0;margin-right:11px">':'<div style="width:64px;height:42px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;margin-right:11px">'+esc(photo||'🔧')+'</div>';
     h+='<div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #f1f5f9">'+img;
     h+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#1e293b">'+esc(t.name)+'</div>';
     h+='<div style="font-size:11px;color:#64748b;margin-top:1px">総数 '+t.total+esc(t.unit)+'</div></div>';
