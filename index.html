@@ -159,12 +159,8 @@ input,select{font-family:inherit}
     </div>
   </div>
   <div class="scrollable">
+    <div id="admin-note" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#92400e;font-weight:600;line-height:1.6;white-space:pre-wrap"></div>
     <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px">管理メニュー</div>
-    <button class="admin-btn" onclick="openRepairModal()">
-      <div class="admin-icon" style="background:#ffedd5;color:#9a3412">🔧</div>
-      <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#1e293b">工具修理</div><div style="font-size:11px;color:#64748b;margin-top:2px">修理登録・写真・メモ管理</div></div>
-      <div style="color:#cbd5e1;font-size:20px">›</div>
-    </button>
     <button class="admin-btn" onclick="openMembersModal()">
       <div class="admin-icon" style="background:#e8f0ff;color:#1241a8">👥</div>
       <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#1e293b">メンバー管理</div><div style="font-size:11px;color:#64748b;margin-top:2px" id="cnt-mem">追加・編集・削除</div></div>
@@ -242,7 +238,7 @@ input,select{font-family:inherit}
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbxiyBz-FQoXyyFFE33tNXRbRl_ETxsGW6Wfqrzo6QIu7KVPbElX94R3opcD51CH5NrMTQ/exec';
 var GAS_LOADED = false;  // 初回ロード完了フラグ
 
-var cfg = {title:'現場工具管理', color:'#1a56db', bg:''};
+var cfg = {title:'現場工具管理', color:'#1a56db', bg:'', adminNote:'※管理者（責任者）以外、編集・削除はしないでください'};
 var GOJUON = ['あ','い','う','え','お','か','き','く','け','こ','さ','し','す','せ','そ','た','ち','つ','て','と','な','に','ぬ','ね','の','は','ひ','ふ','へ','ほ','ま','み','む','め','も','や','ゆ','よ','ら','り','る','れ','ろ','わ','を','ん'];
 var KANA_ROWS = [
   {head:'あ',chars:['あ','い','う','え','お']},
@@ -432,6 +428,13 @@ function updateCnts(){
   document.getElementById('cnt-mem').textContent = members.length+'名 ・ 追加・編集・削除';
   document.getElementById('cnt-site').textContent = sites.length+'箇所 ・ 追加・編集・削除';
   document.getElementById('cnt-tool').textContent = TM.length+'種類 ・ 写真・工具名・総数管理';
+  // 管理者画面の注意書き（アプリ設定で編集可能。空にすると非表示）
+  var an=document.getElementById('admin-note');
+  if(an){
+    var t=(cfg.adminNote==null)?'':String(cfg.adminNote);
+    an.textContent=t;
+    an.style.display=t?'block':'none';
+  }
 }
 
 // ============================================================
@@ -1953,6 +1956,8 @@ function openAppSettings(){
   if(cfg.bg)h+='<button onclick="clearCfgBg()" style="padding:11px 14px;background:#fff;color:#dc2626;border:1px solid #dc2626;border-radius:10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500">削除</button>';
   h+='</div>';
   h+='<input type="file" id="cfg-photo" accept="image/*" style="display:none" onchange="handleCfgPhoto(event)">';
+  h+='<label class="lbl">管理者画面の注意書き<span style="font-size:10px;color:#94a3b8;margin-left:6px">空にすると非表示になります</span></label>';
+  h+='<textarea id="cfg-note" class="inp" rows="2" style="resize:vertical;min-height:52px">'+esc(cfg.adminNote||'')+'</textarea>';
   h+='<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">← 戻る</button><button class="btn-primary" onclick="saveCfg()">保存</button></div>';
   showModal(h);
 }
@@ -1962,7 +1967,7 @@ function cfgPrev(v){var p=document.getElementById('cfg-prev');if(p)p.textContent
 function triggerCfgPhoto(){var e=document.getElementById('cfg-photo');if(e)e.click();}
 function handleCfgPhoto(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){cfg.bg=ev.target.result;openAppSettings();};r.readAsDataURL(f);}
 function clearCfgBg(){cfg.bg='';openAppSettings();}
-function saveCfg(){var t=document.getElementById('cfg-title');if(t){var v=t.value.trim();if(v)cfg.title=v;}markCfgDirty();applyStyle();closeModal();toast('アプリ設定を保存しました');saveAll(null);}
+function saveCfg(){var t=document.getElementById('cfg-title');if(t){var v=t.value.trim();if(v)cfg.title=v;}var n=document.getElementById('cfg-note');if(n)cfg.adminNote=n.value.trim();markCfgDirty();applyStyle();updateCnts();closeModal();toast('アプリ設定を保存しました');saveAll(null);}
 
 // ============================================================
 // 写真クロップ
