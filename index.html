@@ -781,8 +781,10 @@ function openRepairEdit(rid){
   var h='<div class="modal-title">'+(r?'修理編集':'修理登録')+'</div>';
   h+='<div class="photo-area" id="repair-photo-area" onclick="triggerRepairPhoto()">'+pp+'</div>';
   h+='<input type="file" id="repair-photo-inp" accept="image/*" style="display:none" onchange="handleRepairPhoto(event)">';
+  h+='<input type="file" id="repair-photo-cam" accept="image/*" capture="environment" style="display:none" onchange="handleRepairPhoto(event)">';
   h+='<label class="lbl">工具を選択 <span id="rep-tm-selected" style="font-size:11px;color:#1a56db;font-weight:600;margin-left:6px"></span></label>';
   h+='<input type="hidden" id="rep-tm" value="'+(r?r.tmId:'')+'">';
+  h+='<input id="srch-rep" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="" oninput="searchInput(\'srch-rep\',\'_repSearch\',renderRepTmPicker)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-rep\',\'_repSearch\',renderRepTmPicker)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div id="rep-tm-picker"></div>';
   h+='<label class="lbl">どこの現場で修理が必要となったか</label>';
   h+='<select id="rep-site" class="sel">';
@@ -804,11 +806,11 @@ function openRepairEdit(rid){
   h+='<button class="btn-primary" onclick="saveRepair()">保存</button>';
   h+='</div>';
   showModal(h);
-  _repKanaRow=''; _repKana='';
+  _repKanaRow=''; _repKana=''; _repNum=''; _repSearch='';
   renderRepTmPicker();
   setTimeout(onRepTmChange,50);
 }
-var _repKanaRow='', _repKana='';
+var _repKanaRow='', _repKana='', _repNum='', _repSearch='';
 function renderRepTmPicker(){
   var picker=document.getElementById('rep-tm-picker'); if(!picker)return;
   var curId=document.getElementById('rep-tm').value;
@@ -816,6 +818,8 @@ function renderRepTmPicker(){
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=_repKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_repKana)>=0;}):(_repKanaRow?TM.filter(function(t){return (t.yomis||[t.yomi||'']).some(function(y){return getKanaRow(y)===_repKanaRow;});}):TM);
+  if(_repSearch)disp=disp.filter(function(t){return matchSearch(t.name,_repSearch);});
+  if(_repNum)disp=disp.filter(function(t){return matchNum(t.name,_repNum);});
   var h='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
   KANA_ROWS.forEach(function(r){
     if(!activeRows[r.head])return;
@@ -836,7 +840,8 @@ function renderRepTmPicker(){
       h+='</div>';
     }
   }
-  h+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;max-height:200px;overflow-y:auto;margin-bottom:12px">';
+  h+=renderNumRow('addRepNum','clearRepNum',_repNum);
+  h+='<div id="rep-tm-list" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;max-height:200px;overflow-y:auto;margin-bottom:12px">';
   if(!disp.length){h+='<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
     var sel=curId===t.id;
@@ -857,13 +862,44 @@ function renderRepTmPicker(){
 function setRepKanaRow(r){_repKanaRow=r;_repKana='';renderRepTmPicker();}
 function setRepKana(k){_repKana=k;renderRepTmPicker();}
 function clearRepKana(){_repKanaRow='';_repKana='';renderRepTmPicker();}
+function addRepNum(d){_repNum=(_repNum||'')+d;renderRepTmPicker();}
+function clearRepNum(){_repNum='';renderRepTmPicker();}
 function selectRepTm(id){
   var hid=document.getElementById('rep-tm');
   if(hid)hid.value=id;
+  // 選択による再描画ではスクロール位置を保持する
+  // （一覧の下の方の工具を選んでも先頭に戻らないように）
+  var listEl=document.getElementById('rep-tm-list');
+  var keepScroll=listEl?listEl.scrollTop:0;
   renderRepTmPicker();
+  listEl=document.getElementById('rep-tm-list');
+  if(listEl)listEl.scrollTop=keepScroll;
   onRepTmChange();
 }
-function triggerRepairPhoto(){var e=document.getElementById('repair-photo-inp');if(e)e.click();}
+// 写真の取得元を選ぶ小さなシートを表示する。
+// Android（新しい機種）は accept="image/*" だけだとアルバム選択しか出ず
+// カメラが起動できないため、capture属性付きの別inputでカメラを明示的に起動する。
+// （メインモーダルの上に重ねるため、showModalではなく独立オーバーレイを使う）
+function showPhotoSourceChooser(albumInpId, camInpId){
+  var old=document.getElementById('photo-src-overlay'); if(old)old.remove();
+  var ov=document.createElement('div');
+  ov.id='photo-src-overlay';
+  ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:rgba(15,23,42,.55);z-index:300;display:flex;align-items:flex-end';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;width:100%;border-radius:18px 18px 0 0;padding:18px 16px 30px';
+  box.innerHTML='<div style="width:36px;height:4px;background:#e2e8f0;border-radius:4px;margin:0 auto 14px"></div>'
+    +'<button id="ps-cam" style="width:100%;padding:15px;background:#1a56db;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">📷 カメラで撮る</button>'
+    +'<button id="ps-alb" style="width:100%;padding:15px;background:#f1f5f9;color:#1e293b;border:1px solid #e2e8f0;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">🖼 アルバムから選ぶ</button>'
+    +'<button id="ps-cancel" style="width:100%;padding:13px;background:#fff;color:#64748b;border:none;border-radius:12px;font-size:13px;cursor:pointer;font-family:inherit">キャンセル</button>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  function closeChooser(){ov.remove();}
+  ov.addEventListener('click',function(e){if(e.target===ov)closeChooser();});
+  document.getElementById('ps-cam').addEventListener('click',function(){closeChooser();var el=document.getElementById(camInpId);if(el)el.click();});
+  document.getElementById('ps-alb').addEventListener('click',function(){closeChooser();var el=document.getElementById(albumInpId);if(el)el.click();});
+  document.getElementById('ps-cancel').addEventListener('click',closeChooser);
+}
+function triggerRepairPhoto(){showPhotoSourceChooser('repair-photo-inp','repair-photo-cam');}
 function handleRepairPhoto(e){
   var f=e.target.files[0];if(!f)return;
   var r=new FileReader();
@@ -951,13 +987,14 @@ function saveRepair(){
 // ============================================================
 // 会社在庫
 // ============================================================
-function openCompanyStock(){_csKana='';_csKanaRow='';_csSearch='';renderCompanyStock();}
+function openCompanyStock(){_csKana='';_csKanaRow='';_csSearch='';_csNum='';renderCompanyStock();}
 function renderCompanyStock(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
+  if(_csNum)disp=disp.filter(function(t){return matchNum(t.name,_csNum);});
   var h='<div class="modal-title">🏢 会社在庫</div><div class="modal-sub">全工具の会社残数と持出し先現場</div>';
   h+='<input id="srch-cs" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_csSearch)+'" oninput="searchInput(\'srch-cs\',\'_csSearch\',updateCSResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-cs\',\'_csSearch\',updateCSResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
@@ -980,6 +1017,7 @@ function renderCompanyStock(){
       h+='</div>';
     }
   }
+  h+=renderNumRow('addCSNum','clearCSNum',_csNum);
   h+='<div id="cs-results"><div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
@@ -1015,6 +1053,7 @@ function updateCSResults(){
   var el=document.getElementById('cs-results');if(!el)return;
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
+  if(_csNum)disp=disp.filter(function(t){return matchNum(t.name,_csNum);});
   var h='<div style="max-height:50vh;overflow-y:auto;margin-bottom:12px">';
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
@@ -1048,6 +1087,8 @@ function updateCSResults(){
 function clearCSKanaFilter(){_csKana='';_csKanaRow='';renderCompanyStock();}
 function setCSKanaRow(r){_csKanaRow=r;_csKana='';renderCompanyStock();}
 function setCSKana(k){_csKana=k;renderCompanyStock();}
+function addCSNum(d){_csNum=(_csNum||'')+d;renderCompanyStock();}
+function clearCSNum(){_csNum='';renderCompanyStock();}
 
 // ============================================================
 // 持出し・返却
@@ -1161,6 +1202,7 @@ function renderItemEditModal(){
   var h='<div class="modal-title">'+(isNew?'品目追加':'品目編集：'+esc(item.name))+'</div>';
   h+='<div class="photo-area" id="photo-area" onclick="triggerPhoto()">'+pp+'</div>';
   h+='<input type="file" id="photo-inp" accept="image/*" style="display:none" onchange="handlePhoto(event)">';
+  h+='<input type="file" id="photo-cam" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">';
   h+='<label class="lbl">品目名</label><input id="im-name" class="inp" type="text" value="'+(item?esc(item.name):'')+'" placeholder="例：ペンチ">';
   h+='<label class="lbl">カテゴリ</label><select id="im-cat" class="sel">'+copts+'</select>';
   var sibMap={};
@@ -1194,7 +1236,7 @@ function renderItemEditModal(){
   h+='</div>';
   showModal(h);
 }
-function triggerPhoto(){var e=document.getElementById('photo-inp');if(e)e.click();}
+function triggerPhoto(){showPhotoSourceChooser('photo-inp','photo-cam');}
 function handlePhoto(e){
   var f=e.target.files[0];if(!f)return;
   var r=new FileReader();
@@ -1380,7 +1422,7 @@ function delSiteFromBtn(el){showDeleteConfirm('site',el.dataset.id,el.dataset.na
 function openSiteEdit(idx){
   var s=sites[idx];
   var stools=s.tools||[];
-  window._seIdx=idx; window._seKana=''; window._seKanaRow=''; window._seMergedTools=null; window._seSearch='';
+  window._seIdx=idx; window._seKana=''; window._seKanaRow=''; window._seMergedTools=null; window._seSearch=''; window._seNum='';
   var h='<div class="modal-title">'+(isAdmin?'現場編集：':'工具追加：')+esc(s.name)+'</div>';
   if(isAdmin){
     function mkSel(id,val){var h='<select id="'+id+'" class="sel"><option value="">（未設定）</option>';members.forEach(function(m){if(!m.admin)h+='<option'+(m.name===val?' selected':'')+'>'+esc(m.name)+'</option>';});return h+'</select>';}
@@ -1412,6 +1454,7 @@ function renderSiteToolPicker(stools){
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=window._seKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(window._seKana)>=0;}):TM;
   if(window._seSearch)disp=disp.filter(function(t){return matchSearch(t.name,window._seSearch);});
+  if(window._seNum)disp=disp.filter(function(t){return matchNum(t.name,window._seNum);});
   var h='<div style="margin-bottom:4px"><label class="lbl" style="margin-bottom:6px">使用する工具</label>';
   h+='<input id="srch-se" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(window._seSearch||'')+'" oninput="searchInput(\'srch-se\',\'_seSearch\',updateSEResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-se\',\'_seSearch\',updateSEResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
@@ -1434,6 +1477,7 @@ function renderSiteToolPicker(stools){
       h+='</div>';
     }
   }
+  h+=renderNumRow('addSeNum','clearSeNum',window._seNum||'');
   h+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;max-height:220px;overflow-y:auto" id="se-tool-list">';
   var curSiteIdForCalc=(window._seIdx!=null&&sites[window._seIdx])?sites[window._seIdx].id:null;
   disp.forEach(function(t){
@@ -1487,6 +1531,8 @@ function updateSEResults(){
 }
 function setSeKanaRow(r){window._seKanaRow=r;window._seKana='';reRenderSitePicker();}
 function setSeKana(k){window._seKana=k;reRenderSitePicker();}
+function addSeNum(d){window._seNum=(window._seNum||'')+d;reRenderSitePicker();}
+function clearSeNum(){window._seNum='';reRenderSitePicker();}
 function collectSeTools(){
   // collect {id,qty} from current DOM state
   var result=[];
@@ -1562,6 +1608,9 @@ function saveSiteEdit(el){
   items=items.filter(function(x){return x.site!==siteId||!x.ref||toolIds.indexOf(x.ref)>=0;});
   // add/update items for each tool（数量変更があれば操作履歴に記録）
   var siteName=sites[idx].name;
+  // 履歴に残す名前：管理者アカウントで工具表を作る場合は、実際の作成者である
+  // この現場の責任者名を記録する（責任者未設定ならログイン名のまま）
+  var histUser=(isAdmin&&sites[idx].chief)?sites[idx].chief:(curUser||'');
   finalTools.forEach(function(e){
     var tm=findTM(e.id); if(!tm)return;
     var existing=items.find(function(x){return x.site===siteId&&x.ref===e.id;});
@@ -1571,7 +1620,7 @@ function saveSiteEdit(el){
     else{itemId=mkId();items.push({id:itemId,name:tm.name,cat:tm.cat||'工具',site:siteId,unit:tm.unit,total:tm.total,qty:e.qty,mach:false,note:'',photo:tm.photo||'',ref:tm.id});}
     var diff=e.qty-beforeQty;
     if(diff!==0){
-      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:itemId,name:tm.name,site:siteId,amt:Math.abs(diff),user:curUser||'',note:'',after:e.qty});
+      hist.push({ts:Date.now(),type:diff>0?'set_in':'set_out',iid:itemId,name:tm.name,site:siteId,amt:Math.abs(diff),user:histUser,note:'',after:e.qty});
     }
   });
   closeModal(); toast('現場情報を更新しました'); if(curSiteId)renderContent();
@@ -1662,9 +1711,10 @@ var _csKanaRow='';
 var _tmSearch='';
 var _csSearch='';
 var _addSearch='';
+var _tmNum='', _csNum='';
 // 半角カナ→全角カナ変換＋濁点無視＋小文字化（検索用）
 function normalizeStr(s){
-  var str=String(s||'').replace(/[\uFF65-\uFF9F]/g,function(c){
+  var str=String(s||'').replace(/[\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0);}).replace(/[\uFF65-\uFF9F]/g,function(c){
     var code=c.charCodeAt(0);
     var map='\u30F2\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30C3\u30FC\u30A2\u30A4\u30A6\u30A8\u30AA\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CA\u30CB\u30CC\u30CD\u30CE\u30CF\u30D2\u30D5\u30D8\u30DB\u30DE\u30DF\u30E0\u30E1\u30E2\u30E4\u30E6\u30E8\u30E9\u30EA\u30EB\u30EC\u30ED\u30EF\u30F3\u3099\u309A';
     return map[code-0xFF66]||c;
@@ -1678,6 +1728,21 @@ function matchSearch(name, query){
   if(!query||query.length<2)return true;
   var n=normalizeStr(name), q=normalizeStr(query);
   return n.indexOf(q)>=0;
+}
+// 数字絞り込み：工具名に数字列（例:'34'）が含まれるか（全角数字も可）
+function matchNum(name,num){
+  if(!num)return true;
+  return normalizeStr(name).indexOf(num)>=0;
+}
+// 数字絞り込みボタン行（0〜9を押した順につなげる電卓方式。✕で解除）
+function renderNumRow(addFn, clearFn, cur){
+  var h='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
+  '0123456789'.split('').forEach(function(d){
+    h+='<button type="button" class="kana-btn" data-d="'+d+'" onclick="'+addFn+'(this.dataset.d)" style="min-width:32px">'+d+'</button>';
+  });
+  if(cur)h+='<button type="button" class="kana-btn" onclick="'+clearFn+'()" style="color:#dc2626;border-color:#fecaca;font-weight:700">✕ '+cur+'</button>';
+  h+='</div>';
+  return h;
 }
 var _searchTimer=null;
 function _getSearchVar(varName){return varName.indexOf('.')<0?window[varName]:window[varName.split('.')[1]];}
@@ -1710,13 +1775,14 @@ function onCompEnd(id,varName,renderFn){
   _setSearchVar(varName,newVal);
   if(_needsRender(oldVal,newVal))renderFn();
 }
-function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';renderTMModal();}
+function openToolMasterModal(){_tmKana='';_tmKanaRow='';_tmSearch='';_tmNum='';renderTMModal();}
 function renderTMModal(){
   var kanas=TM.reduce(function(a,t){(t.yomis||[t.yomi||'']).forEach(function(y){if(y&&a.indexOf(y)<0)a.push(y);});return a;},[]).sort();
   var activeRows={};
   kanas.forEach(function(k){var r=getKanaRow(k);if(r)activeRows[r]=true;});
   var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
   if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
+  if(_tmNum)disp=disp.filter(function(t){return matchNum(t.name,_tmNum);});
   var h='<div class="modal-title">🔧 工具管理（全体）</div><div class="modal-sub">全体の工具・写真・総数を管理します</div>';
   h+='<input id="srch-tm" type="text" placeholder="🔍 工具名で検索（2文字以上）..." value="'+esc(_tmSearch)+'" oninput="searchInput(\'srch-tm\',\'_tmSearch\',updateTMResults)" oncompositionstart="onCompStart()" oncompositionend="onCompEnd(\'srch-tm\',\'_tmSearch\',updateTMResults)" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:8px;font-family:inherit;box-sizing:border-box">';
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
@@ -1739,6 +1805,7 @@ function renderTMModal(){
       h+='</div>';
     }
   }
+  h+=renderNumRow('addTMNum','clearTMNum',_tmNum);
   h+='<div id="tm-results"><div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:14px;overflow:hidden;max-height:50vh;overflow-y:auto">';
   if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
@@ -1759,6 +1826,7 @@ function updateTMResults(){
   var el=document.getElementById('tm-results');if(!el)return;
   var disp=_tmKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_tmKana)>=0;}):TM;
   if(_tmSearch)disp=disp.filter(function(t){return matchSearch(t.name,_tmSearch);});
+  if(_tmNum)disp=disp.filter(function(t){return matchNum(t.name,_tmNum);});
   var h='<div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:14px;overflow:hidden;max-height:50vh;overflow-y:auto">';
   if(!disp.length){h+='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
@@ -1776,6 +1844,8 @@ function updateTMResults(){
 function clearTmKanaFilter(){_tmKana='';_tmKanaRow='';renderTMModal();}
 function setTmKanaRow(r){_tmKanaRow=r;_tmKana='';renderTMModal();}
 function setTmKana(k){_tmKana=k;renderTMModal();}
+function addTMNum(d){_tmNum=(_tmNum||'')+d;renderTMModal();}
+function clearTMNum(){_tmNum='';renderTMModal();}
 function openTMEdit(el){
   var id=el.dataset.tmid, t=findTM(id); if(!t)return;
   var photo=t.photo||'';
@@ -1784,6 +1854,7 @@ function openTMEdit(el){
   var h='<div class="modal-title">工具名編集：'+esc(t.name)+'</div>';
   h+='<div class="photo-area" id="tme-photo-area" onclick="triggerTMPhoto()">'+pp+'</div>';
   h+='<input type="file" id="tme-photo-inp" accept="image/*" style="display:none" onchange="handleTMPhoto(event)">';
+  h+='<input type="file" id="tme-photo-cam" accept="image/*" capture="environment" style="display:none" onchange="handleTMPhoto(event)">';
   h+='<label class="lbl">工具名</label><input id="tme-name" class="inp" type="text" value="'+esc(t.name)+'">';
   h+='<label class="lbl">読み（複数選択可）<span style="font-size:10px;color:#94a3b8;margin-left:6px">別名・異なる呼び方も追加できます</span></label>';
   h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px">';
@@ -1805,7 +1876,7 @@ function toggleTMYomi(el){
   el.style.color=on?'#fff':'';
   el.style.borderColor=on?'#1a56db':'';
 }
-function triggerTMPhoto(){var e=document.getElementById('tme-photo-inp');if(e)e.click();}
+function triggerTMPhoto(){showPhotoSourceChooser('tme-photo-inp','tme-photo-cam');}
 function handleTMPhoto(e){
   var f=e.target.files[0];if(!f)return;
   var r=new FileReader();
