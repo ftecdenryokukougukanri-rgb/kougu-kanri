@@ -735,7 +735,7 @@ var _repairEditId=null, _repairPhoto='';
 function openRepairModal(){
   var h='<div class="modal-title">🔧 工具修理</div><div class="modal-sub">修理が必要な工具の登録・管理</div>';
   h+=bigListBtnHtml('replist');
-  h+='<div id="rep-list" style="'+bigListZoom()+'max-height:55vh;overflow-y:auto;margin-bottom:12px">';
+  h+='<div id="rep-list" style="'+bigListStyle('55vh','41vh')+'overflow-y:auto;margin-bottom:12px">';
   if(!repairs.length){
     h+='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:12px">修理中の工具はありません</div>';
   } else {
@@ -846,7 +846,7 @@ function renderRepTmPicker(){
     }
   }
   h+=renderNumRow('addRepNum','clearRepNum',_repNum);
-  h+='<div id="rep-tm-list" style="'+bigListZoom()+'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;max-height:200px;overflow-y:auto;margin-bottom:12px">';
+  h+='<div id="rep-tm-list" style="'+bigListStyle('200px','148px')+'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;overflow-y:auto;margin-bottom:12px">';
   if(!disp.length){h+='<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px">該当する工具がありません</div>';}
   disp.forEach(function(t){
     var sel=curId===t.id;
@@ -1024,7 +1024,7 @@ function renderCompanyStock(){
     }
   }
   h+=renderNumRow('addCSNum','clearCSNum',_csNum);
-  h+='<div id="cs-results"><div id="cs-list" style="'+bigListZoom()+'max-height:50vh;overflow-y:auto;margin-bottom:12px">';
+  h+='<div id="cs-results"><div id="cs-list" style="'+bigListStyle('50vh','37vh')+'overflow-y:auto;margin-bottom:12px">';
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
@@ -1060,7 +1060,7 @@ function updateCSResults(){
   var disp=_csKana?TM.filter(function(t){return (t.yomis||[t.yomi||'']).indexOf(_csKana)>=0;}):TM;
   if(_csSearch)disp=disp.filter(function(t){return matchSearch(t.name,_csSearch);});
   if(_csNum)disp=disp.filter(function(t){return matchNum(t.name,_csNum);});
-  var h='<div id="cs-list" style="'+bigListZoom()+'max-height:50vh;overflow-y:auto;margin-bottom:12px">';
+  var h='<div id="cs-list" style="'+bigListStyle('50vh','37vh')+'overflow-y:auto;margin-bottom:12px">';
   disp.forEach(function(tm){
     var totalAtSites=0, sitesWithTool=[];
     items.forEach(function(x){
@@ -1485,7 +1485,7 @@ function renderSiteToolPicker(stools){
     }
   }
   h+=renderNumRow('addSeNum','clearSeNum',window._seNum||'');
-  h+='<div style="'+bigListZoom()+'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;max-height:220px;overflow-y:auto" id="se-tool-list">';
+  h+='<div style="'+bigListStyle('220px','163px')+'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;overflow-y:auto" id="se-tool-list">';
   var curSiteIdForCalc=(window._seIdx!=null&&sites[window._seIdx])?sites[window._seIdx].id:null;
   disp.forEach(function(t){
     var chk=stoolMap.hasOwnProperty(t.id);
@@ -1744,7 +1744,12 @@ function matchNum(name,num){
 // 大きく表示モード（高齢者向け）。端末ごとに記憶され、一覧の写真・文字が約1.35倍になる
 var _bigList=false;
 try{_bigList=localStorage.getItem('kougu_biglist')==='1';}catch(e){}
-function bigListZoom(){return _bigList?'zoom:1.35;':'';}
+// 拡大時はzoomで中身が1.35倍になるぶん枠のmax-heightを1/1.35に縮め、
+// 見た目の一覧の高さ（画面に占める割合）を標準時と同じに保つ。
+// これで「大きく表示にすると戻すボタンや閉じるボタンが画面外に出る」ことがなくなる
+function bigListStyle(normalMax,bigMax){
+  return _bigList?('zoom:1.35;max-height:'+bigMax+';'):('max-height:'+normalMax+';');
+}
 function bigListBtnHtml(scr){
   return '<div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button type="button" onclick="toggleBigList(\''+scr+'\')" style="padding:6px 14px;border-radius:16px;border:1px solid '+(_bigList?'#1a56db':'#e2e8f0')+';background:'+(_bigList?'#1a56db':'#fff')+';color:'+(_bigList?'#fff':'#475569')+';font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">'+(_bigList?'Aa 標準の大きさに戻す':'Aa 大きく表示')+'</button></div>';
 }
