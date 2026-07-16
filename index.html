@@ -1751,20 +1751,31 @@ function bigListBtnHtml(scr){
 function toggleBigList(scr){
   _bigList=!_bigList;
   try{localStorage.setItem('kougu_biglist',_bigList?'1':'0');}catch(e){}
-  // 再描画でスクロール位置が先頭に戻らないよう、モーダルと一覧の位置を保持する。
-  // 一覧は拡大率が変わるため、倍率をかけて「見ていた工具」が同じ位置に来るようにする
-  var ratio=_bigList?1.35:1/1.35;
+  // スクロール位置の保持：倍率計算はブラウザごとに挙動が違いズレるため、
+  // 「押した瞬間に一覧の先頭に見えていた行」を覚えておき、切替後にその行へ合わせる
   var listIds=['cs-list','se-tool-list','rep-tm-list','rep-list'];
-  var keep={};
-  listIds.forEach(function(id){var el=document.getElementById(id);if(el)keep[id]=el.scrollTop;});
+  var anchors={}, hadScroll=false;
+  listIds.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el||el.scrollTop<=5)return; // ほぼ先頭なら覚える必要なし
+    var top=el.getBoundingClientRect().top, kids=el.children;
+    for(var i=0;i<kids.length;i++){
+      if(kids[i].getBoundingClientRect().bottom>top+1){anchors[id]=i;hadScroll=true;break;}
+    }
+  });
   var mi=document.getElementById('modal-inner');
   var miKeep=mi?mi.scrollTop:0;
   if(scr==='cs')renderCompanyStock();
   else if(scr==='se')reRenderSitePicker();
   else if(scr==='rep')renderRepTmPicker();
   else if(scr==='replist')openRepairModal();
-  listIds.forEach(function(id){var el=document.getElementById(id);if(el&&keep[id]!=null)el.scrollTop=keep[id]*ratio;});
-  if(mi)mi.scrollTop=miKeep;
+  Object.keys(anchors).forEach(function(id){
+    var el=document.getElementById(id);
+    var k=el?el.children[anchors[id]]:null;
+    if(k&&k.scrollIntoView)k.scrollIntoView({block:'start'});
+  });
+  // 一覧をスクロールしていなかった場合はモーダルの位置だけ元に戻す
+  if(!hadScroll&&mi)mi.scrollTop=miKeep;
 }
 // 数字絞り込みボタン行（0〜9を押した順につなげる電卓方式。✕で解除）
 function renderNumRow(addFn, clearFn, cur){
