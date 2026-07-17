@@ -2146,7 +2146,16 @@ function cropApply(){
   ctx.fillRect(0,0,OUT_W,OUT_H);
   var sx=-_cropX/_cropScale, sy=-_cropY/_cropScale;
   var sw=vw/_cropScale, sh=vh/_cropScale;
-  ctx.drawImage(img,sx,sy,sw,sh,0,0,OUT_W,OUT_H);
+  // 切り抜き範囲が写真の外にはみ出す部分は自前で切り詰めてから描画する。
+  // iPhoneのSafariは、はみ出した範囲を渡すと写真を引き伸ばして埋めてしまい
+  // 「登録した写真が横（縦）に伸びる」原因になるため（他ブラウザは白余白になる）
+  var iw2=img.naturalWidth||img.width, ih2=img.naturalHeight||img.height;
+  var cx1=Math.max(0,sx), cy1=Math.max(0,sy);
+  var cx2=Math.min(iw2,sx+sw), cy2=Math.min(ih2,sy+sh);
+  if(cx2>cx1&&cy2>cy1){
+    var kx=OUT_W/sw, ky=OUT_H/sh;
+    ctx.drawImage(img,cx1,cy1,cx2-cx1,cy2-cy1,(cx1-sx)*kx,(cy1-sy)*ky,(cx2-cx1)*kx,(cy2-cy1)*ky);
+  }
   var dataUrl=canvas.toDataURL('image/jpeg',0.75);  // 0.92→0.75に圧縮
   // まずUIに反映（base64でプレビュー表示）
   var target=document.getElementById(_cropTargetId);
