@@ -622,7 +622,7 @@ function openDetailById(itemId){
   h+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#475569;margin-bottom:6px">📤 持出しを行った人</div>'+holdH+'</div>';
   h+='<div class="action-row">';
   h+='<button class="btn-return" data-id="'+itemId+'" data-type="in" onclick="openAdjustFromBtn(this)">返却</button>';
-  h+='<button class="btn-takeout" data-id="'+itemId+'" data-type="out" onclick="openAdjustFromBtn(this)">持出し</button>';
+  h+='<button class="btn-takeout" data-id="'+itemId+'" data-type="out" onclick="openAdjustFromBtn(this)">持出し（追加）</button>';
   h+='<button class="btn-sm" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa" data-id="'+itemId+'" onclick="openTransferFromBtn(this)">他現場へ</button>';
   h+='<button class="btn-sm" data-id="'+itemId+'" onclick="openItemHistoryFromBtn(this)">履歴</button>';
   if(isAdmin)h+='<button class="btn-sm" data-id="'+itemId+'" onclick="openItemEditFromBtn(this)">編集</button>';
