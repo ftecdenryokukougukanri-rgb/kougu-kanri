@@ -1425,9 +1425,20 @@ function openSitesModal(){
 }
 function openSiteEditFromModal(el){openSiteEdit(parseInt(el.dataset.idx));}
 function delSiteFromBtn(el){showDeleteConfirm('site',el.dataset.id,el.dataset.name);}
+// 現場の工具表(s.tools)に「現在の現場在庫(items)の数量」を反映して返す。
+// s.toolsの数量は工具表を保存した時点の値のままで、その後の持出し・返却が
+// 反映されない。ピッカーの初期値・保存の土台に古い値を使うと、保存した瞬間に
+// 持出し・返却で増減した在庫が古い数へ巻き戻ってしまうため、必ずこちらを使う
+function liveSiteTools(s){
+  return (s&&s.tools?s.tools:[]).map(function(e){
+    if(!e||!e.id)return e;
+    var it=items.find(function(x){return x.site===s.id&&x.ref===e.id;});
+    return {id:e.id,qty:it?(it.qty||0):(e.qty||0)};
+  });
+}
 function openSiteEdit(idx){
   var s=sites[idx];
-  var stools=s.tools||[];
+  var stools=liveSiteTools(s);
   window._seIdx=idx; window._seKana=''; window._seKanaRow=''; window._seMergedTools=null; window._seSearch=''; window._seNum='';
   var h='<div class="modal-title">'+(isAdmin?'現場編集：':'工具追加：')+esc(s.name)+'</div>';
   if(isAdmin){
@@ -1489,19 +1500,23 @@ function renderSiteToolPicker(stools){
   var curSiteIdForCalc=(window._seIdx!=null&&sites[window._seIdx])?sites[window._seIdx].id:null;
   disp.forEach(function(t){
     var chk=stoolMap.hasOwnProperty(t.id);
+    // 登録済みの工具は一般ユーザーからは変更不可（数の増減は持出し・返却で行う運用）。
+    // 管理者の現場編集では従来どおり変更・削除できる（間違い修正の手段を残す）
+    var lockRow=chk&&!isAdmin;
     var qty=chk?stoolMap[t.id]:0;
     var photo=t.photo||'';
     var maxQty=Math.max(0,getSiteToolMaxQty(t.id,curSiteIdForCalc));
     var img=isPhoto(photo)?'<img src="'+thumbUrl(photo,200)+'" loading="lazy" style="width:44px;height:28px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;margin-right:9px;flex-shrink:0">':'<div style="width:28px;height:28px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:9px">'+esc(photo||'🔧')+'</div>';
     h+='<div class="se-tool-row" data-tname="'+esc(t.name)+'" style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9">';
     h+=img;
-    h+='<input type="checkbox" class="se-tool-chk" value="'+t.id+'"'+(chk?' checked':'')+' style="width:16px;height:16px;margin-right:9px;accent-color:#1a56db;flex-shrink:0" onchange="seToolChkChange(this)">';
+    h+='<input type="checkbox" class="se-tool-chk" value="'+t.id+'"'+(chk?' checked':'')+(lockRow?' disabled':'')+' style="width:16px;height:16px;margin-right:9px;accent-color:#1a56db;flex-shrink:0" onchange="seToolChkChange(this)">';
     var tc=t.cat||'工具';var tcStyle=tc==='工具'?'background:#e8f0ff;color:#1241a8':tc==='機械'?'background:#f1f5f9;color:#475569':tc==='保護具'?'background:#f0fdf4;color:#166534':tc==='消耗品'?'background:#fff7ed;color:#9a3412':'background:#fdf4ff;color:#7e22ce';
-    h+='<span style="font-size:13px;color:#1e293b;font-weight:500;flex:1;min-width:0">'+esc(t.name)+'<span style="font-size:9px;'+tcStyle+';padding:1px 5px;border-radius:8px;margin-left:5px;font-weight:600">'+esc(tc)+'</span><span style="display:block;font-size:10px;color:'+(maxQty>0?'#16a34a':'#dc2626')+';margin-top:2px;font-weight:600">会社残数 '+maxQty+esc(t.unit||'')+'</span></span>';
+    h+='<span style="font-size:13px;color:#1e293b;font-weight:500;flex:1;min-width:0">'+esc(t.name)+'<span style="font-size:9px;'+tcStyle+';padding:1px 5px;border-radius:8px;margin-left:5px;font-weight:600">'+esc(tc)+'</span><span style="display:block;font-size:10px;color:'+(maxQty>0?'#16a34a':'#dc2626')+';margin-top:2px;font-weight:600">会社残数 '+maxQty+esc(t.unit||'')+'</span>'+(lockRow?'<span style="display:block;font-size:9px;color:#94a3b8;margin-top:1px">登録済み（数の変更は持出し・返却で）</span>':'')+'</span>';
     h+='<div style="display:flex;align-items:center;gap:2px;flex-shrink:0">';
-    h+='<button type="button" onclick="seToolQtyAdj(this,-1)"'+(chk?'':' disabled')+' style="width:26px;height:30px;border:1px solid #e2e8f0;background:'+(chk?'#f1f5f9':'#f8fafc')+';border-radius:6px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;padding:0">▼</button>';
-    h+='<input type="number" class="se-tool-qty" data-tid="'+t.id+'" value="'+qty+'" min="0" placeholder="数量" inputmode="numeric"'+(chk?'':' disabled')+' style="width:54px;padding:4px 4px;border:1px solid #e2e8f0;border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:'+(chk?'#fff':'#f1f5f9')+';color:#1e293b;-webkit-appearance:none">';
-    h+='<button type="button" onclick="seToolQtyAdj(this,1)"'+(chk?'':' disabled')+' style="width:26px;height:30px;border:1px solid #e2e8f0;background:'+(chk?'#f1f5f9':'#f8fafc')+';border-radius:6px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;padding:0">▲</button>';
+    var qtyOn=chk&&!lockRow; // 数量を操作できる状態か
+    h+='<button type="button" onclick="seToolQtyAdj(this,-1)"'+(qtyOn?'':' disabled')+' style="width:26px;height:30px;border:1px solid #e2e8f0;background:'+(qtyOn?'#f1f5f9':'#f8fafc')+';border-radius:6px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;padding:0">▼</button>';
+    h+='<input type="number" class="se-tool-qty" data-tid="'+t.id+'" value="'+qty+'" min="0" placeholder="数量" inputmode="numeric"'+(qtyOn?'':' disabled')+' style="width:54px;padding:4px 4px;border:1px solid #e2e8f0;border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:'+(qtyOn?'#fff':'#f1f5f9')+';color:#1e293b;-webkit-appearance:none">';
+    h+='<button type="button" onclick="seToolQtyAdj(this,1)"'+(qtyOn?'':' disabled')+' style="width:26px;height:30px;border:1px solid #e2e8f0;background:'+(qtyOn?'#f1f5f9':'#f8fafc')+';border-radius:6px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;padding:0">▲</button>';
     h+='</div>';
     h+='</div>';
   });
@@ -1554,7 +1569,7 @@ function collectSeTools(){
 }
 function reRenderSitePicker(){
   var cur=collectSeTools(); // [{id,qty}] currently visible & checked
-  var s=sites[window._seIdx]; var stored=s?s.tools||[]:[];
+  var s=sites[window._seIdx]; var stored=s?liveSiteTools(s):[];
   // _seMergedToolsがあれば前回の切替で保存した状態をベースにする（チェック状態を保持）
   var base=window._seMergedTools||stored;
   var map={};
@@ -1583,7 +1598,7 @@ function saveSiteEdit(el){
   // collect visible state
   var visibleTools=collectSeTools();
   var s=sites[idx];
-  var stored=s.tools||[];
+  var stored=liveSiteTools(s);
   var map={};
   stored.forEach(function(e){if(e&&e.id)map[e.id]=e.qty||0;});
   document.querySelectorAll('.se-tool-chk:not(:checked)').forEach(function(c){delete map[c.value];});
