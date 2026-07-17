@@ -1588,16 +1588,12 @@ function reRenderSitePicker(){
 }
 function saveSiteEdit(el){
   var idx=parseInt(el.dataset.idx);
-  markSiteTouched(sites[idx].id); // 編集した現場（在庫マージの対象範囲）
-  markSiteDirty(sites[idx].id);   // 現場行（責任者・班長・工具表）の変更をマージ送信
-  if(isAdmin){
-    var ce=document.getElementById('se-chief');if(ce)sites[idx].chief=ce.value;
-    var l0=document.getElementById('se-l0'),l1=document.getElementById('se-l1'),l2=document.getElementById('se-l2');
-    if(l0)sites[idx].leaders=[l0.value,l1?l1.value:'',l2?l2.value:''];
-  }
-  // collect visible state
-  var visibleTools=collectSeTools();
   var s=sites[idx];
+  var siteId=s.id;
+  // まず画面の状態を集めるだけにして、この時点では何も書き換えない。
+  // （上限エラーで中断したとき、保存フラグや選択状態が変わったまま残ると、
+  //   次の無関係な保存で古いデータが送られる事故につながるため）
+  var visibleTools=collectSeTools();
   var stored=liveSiteTools(s);
   var map={};
   stored.forEach(function(e){if(e&&e.id)map[e.id]=e.qty||0;});
@@ -1605,12 +1601,11 @@ function saveSiteEdit(el){
   visibleTools.forEach(function(e){map[e.id]=e.qty;});
   if(window._seMergedTools){
     window._seMergedTools.forEach(function(e){if(!map.hasOwnProperty(e.id))map[e.id]=e.qty;});
-    window._seMergedTools=null;
   }
   var finalTools=Object.keys(map).map(function(id){return {id:id,qty:map[id]};});
-  var siteId=sites[idx].id;
 
   // ▼ 会社全体の在庫上限チェック（他現場在庫＋修理中も含めて、マスター総数を超えないか確認）
+  //   エラー時はここで中断＝データ・フラグとも一切変更なし（修正してそのまま保存し直せる）
   for(var i=0;i<finalTools.length;i++){
     var e=finalTools[i];
     var tm=findTM(e.id); if(!tm)continue;
@@ -1621,6 +1616,15 @@ function saveSiteEdit(el){
     }
   }
 
+  // ▼ チェックを通ったのでここから確定処理
+  window._seMergedTools=null;
+  markSiteTouched(siteId); // 編集した現場（在庫マージの対象範囲）
+  markSiteDirty(siteId);   // 現場行（責任者・班長・工具表）の変更をマージ送信
+  if(isAdmin){
+    var ce=document.getElementById('se-chief');if(ce)s.chief=ce.value;
+    var l0=document.getElementById('se-l0'),l1=document.getElementById('se-l1'),l2=document.getElementById('se-l2');
+    if(l0)s.leaders=[l0.value,l1?l1.value:'',l2?l2.value:''];
+  }
   sites[idx].tools=finalTools;
   // apply to items: add missing, remove unchecked, update existing qty
   var toolIds=finalTools.map(function(e){return e.id;});
