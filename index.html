@@ -187,8 +187,9 @@ input,select{font-family:inherit}
 <!-- メイン -->
 <div class="scr hidden" id="screen-main">
   <div class="hdr hdr-bg">
-    <div style="display:flex;align-items:center;gap:8px"><button class="hdr-back" onclick="goToSiteSelect()" style="padding:8px 12px" title="現場選択へ戻る">← 戻る</button><div class="hdr-l"><div class="t1" id="main-title">現場工具管理</div><div class="t2" id="hdr-site"></div></div></div>
+    <div class="hdr-l"><div class="t1" id="main-title">現場工具管理</div><div class="t2" id="hdr-site"></div></div>
     <div style="display:flex;gap:6px;align-items:center">
+      <button class="hdr-back" onclick="goToSiteSelect()" style="padding:8px 12px" title="現場選択へ戻る">← 戻る</button>
       <button class="hdr-back" onclick="refreshData()" style="padding:8px 12px" title="データ更新">🔄</button>
       <button class="hdr-user" onclick="confirmLogout()" style="flex-direction:column;align-items:flex-end;padding:5px 10px;gap:2px;border-radius:14px">
         <div style="display:flex;align-items:center;gap:5px">
